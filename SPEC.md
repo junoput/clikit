@@ -252,9 +252,9 @@ The bar ends when `CURRENT` reaches `TOTAL`, or when it is ended early. An early
 #### Several tasks under one total
 
 `tasks TITLE [NAME|WEIGHT|SHOW]...` names a group of tasks; nothing is shown yet. `task NAME CURRENT
-TOTAL` says how far a task is, `task NAME` that it is running without a count, `task_done NAME`
-and `task_fail NAME [TEXT]` how it ended, and `tasks_done` ends the group. A task is waiting,
-running, done or failed. Reaching `TOTAL` makes it done; what has ended stays ended. A name not
+TOTAL` says how far a task is, `task NAME` that it is running without a count, `task_done NAME`,
+`task_fail NAME [TEXT]` and `task_skip NAME` how it ended, and `tasks_done` ends the group. A
+task is waiting, running, done, failed or skipped. Reaching `TOTAL` makes it done; what has ended stays ended. A name not
 seen before joins the group with weight 1, and a task without a group starts one called `Total`.
 
 Tasks that run one after the other are the stages of a job; tasks that run at the same time are
@@ -319,6 +319,13 @@ it stopped.
 **Known times**, for joining work that is already running: `tasks -t SECONDS` says the group
 started that long ago, `task -t SECONDS NAME ...` the same for a task, and
 `task_done -t SECONDS NAME` that the task took that long.
+
+**Skipped.** `task_skip NAME` ends a task that was not needed: `– NAME  skipped`, the dash
+dimmed (`-` in ASCII). For the total it is done. Plain and agent output say nothing about it.
+
+**What came of it.** A note set on a task after it has ended stays on its line, after the time
+or the reason: `✓ Transfer  5m 37s  1,204 files`. The note a task had while running is dropped
+when it ends. On a narrow terminal the text after the name is cut and ends in `…`.
 
 **Stopped.** A task still running when the group ends is drawn once more with `■` in yellow
 (`=` in ASCII) in place of the spinner.

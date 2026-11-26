@@ -15,7 +15,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 CASES = os.path.join(HERE, "cases.txt")
 LIB = os.path.join(HERE, "..", "sh", "cli.sh")
-TIMED = {"time", "progress", "progress_done", "spin", "tasks", "task", "task_done", "task_fail", "tasks_done"}  # their output contains a duration
+TIMED = {"time", "progress", "progress_done", "spin", "tasks", "task", "task_done", "task_fail", "tasks_done", "task_skip", "task_note"}  # their output contains a duration
 
 
 def decode(text):

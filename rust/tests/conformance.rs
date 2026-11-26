@@ -322,6 +322,7 @@ fn call(words: &[String], running: &mut Running) -> i32 {
             [name] => running.task(name).done(),
             _ => panic!("task_done [-t SECONDS] NAME"),
         },
+        "task_skip" => running.task(&args[0]).skip(),
         "task_note" => running.task(&args[0]).note(args.get(1).map_or("", String::as_str)),
         "size" => println_out(&clikit::size(args[0].parse().unwrap())),
         "task_fail" => running.task(&args[0]).fail(args.get(1).map_or("", String::as_str)),

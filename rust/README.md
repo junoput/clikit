@@ -89,7 +89,8 @@ each call in each mode.
 | `Tasks::new(title)`, `.add(name, weight)`, `.finish()` | `cli_tasks`, `cli_tasks_done` | several tasks under one total |
 | `task.set(n, total)`, `.start()`, `.done()`, `.fail(why)` | `cli_task`, `cli_task_done`, `cli_task_fail` | one task of the group; can be sent to a thread |
 | `tasks.add(..).bytes().rate().eta()`, `.percent()` | the `SHOW` cell | what a running task shows: sizes, speed, time left, or only a percentage |
-| `task.note(text)` | `cli_task_note` | a few words next to a running task |
+| `task.note(text)` | `cli_task_note` | a few words next to a task: what it is doing, or, once it has ended, what came of it |
+| `task.skip()` | `cli_task_skip` | the task was not needed: `– name  skipped`, done for the total |
 | `tasks.started(ago)`, `task.started(ago)`, `task.done_in(took)` | `-t SECONDS` | times that are known, for joining work already running |
 | `spin(label, \|\| -> Result)` | | a spinner around a closure |
 | `spin_command(label, &mut Command)` | `cli_spin` | a spinner around a program; its output shows only if it fails |

@@ -126,6 +126,17 @@ fn sizes_and_what_a_task_shows() {
     assert!(run.err.contains("✓ Earlier  14m 02s"), "{}", run.err);
     assert!(run.err.contains("● Copy (1/2, 2h 00m)"), "{}", run.err);
     assert!(run.err.contains("■ Photos"), "a task still running at the end was stopped: {}", run.err);
+
+    let run = Session::new(Mode::Rich).env("NO_COLOR", "1").env("LANG", "en_US.UTF-8").run(|| {
+        let job = clikit::Tasks::new("Job");
+        let (first, second) = (job.add("first", 1), job.add("second", 1));
+        first.skip();
+        second.done_in(Duration::from_secs(2));
+        second.note("3 files");
+        assert!(job.finish(), "a skipped task is no failure");
+    });
+    assert!(run.err.contains("– first   skipped\x1b[K\n✓ second  2.0s  3 files\x1b[K\n"), "{:?}", run.err);
+    assert!(run.err.ends_with("✓ Job (2/2, 0ms)\n") || run.err.contains("✓ Job (2/2, "), "{:?}", run.err);
 }
 
 #[test]

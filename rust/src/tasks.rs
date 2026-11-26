@@ -28,6 +28,14 @@ enum State {
     Running,
     Done,
     Failed,
+    /// Not needed. For the total it is done.
+    Skipped,
+}
+
+impl State {
+    fn ended(self) -> bool {
+        matches!(self, State::Done | State::Failed | State::Skipped)
+    }
 }
 
 /// A moment something started: when it was noted, and how long before that it had begun.
@@ -95,7 +103,7 @@ impl Group {
         let item = &mut self.items[id];
         let started = item.state == State::Waiting;
         match item.state {
-            State::Done | State::Failed => return, // what has ended stays ended
+            State::Done | State::Failed | State::Skipped => return, // what has ended stays ended
             State::Waiting => (item.start, item.state) = (Some(Clock::started(item.ago)), State::Running),
             State::Running => {}
         }
@@ -112,8 +120,13 @@ impl Group {
         let mode = ctx::theme().mode;
         self.used = true;
         let item = &mut self.items[id];
-        if matches!(item.state, State::Done | State::Failed) {
+        if item.state.ended() {
             return;
+        }
+        item.note.clear(); // what it was doing is over
+        if state == State::Skipped {
+            (item.state, item.text) = (State::Skipped, String::new());
+            return self.draw(Draw::Now);
         }
         let took = match took {
             Some(took) => duration(took.as_millis() as u64),
@@ -147,7 +160,7 @@ impl Group {
         for item in &self.items {
             let mut points = (item.current * 1000).checked_div(item.total).unwrap_or(0);
             match item.state {
-                State::Done => (points, self.done) = (1000, self.done + 1),
+                State::Done | State::Skipped => (points, self.done) = (1000, self.done + 1),
                 State::Failed => self.failed += 1,
                 State::Waiting => (points, waiting) = (0, waiting + 1),
                 State::Running => {}
@@ -218,16 +231,30 @@ impl Group {
         };
         let (mut out, mut lines) = (String::new(), 0);
         for item in &self.items {
-            if many && matches!(item.state, State::Waiting | State::Done) {
+            if many && matches!(item.state, State::Waiting | State::Done | State::Skipped) {
                 continue;
             }
             let name = fit(&item.name, name_width, 'l', ellipsis);
             let line = match item.state {
                 State::Waiting => format!("{dim}{} {}{reset}", t.g("·", "."), name.trim_end_matches(' ')),
-                State::Done => format!("{green}{}{reset} {name}  {dim}{}{reset}", t.g("✓", "+"), item.text),
-                State::Failed => {
-                    let why = if item.text.is_empty() { "failed" } else { &item.text };
-                    format!("{red}{}{reset} {name}  {dim}{why}{reset}", t.g("✗", "x"))
+                State::Done | State::Failed | State::Skipped => {
+                    let (mark, mut tail) = match item.state {
+                        State::Done => (format!("{green}{}{reset}", t.g("✓", "+")), item.text.clone()),
+                        State::Failed if item.text.is_empty() => {
+                            (format!("{red}{}{reset}", t.g("✗", "x")), "failed".into())
+                        }
+                        State::Failed => (format!("{red}{}{reset}", t.g("✗", "x")), item.text.clone()),
+                        _ => (format!("{dim}{}{reset}", t.g("–", "-")), "skipped".into()),
+                    };
+                    // A note on a task that has ended says what came of it.
+                    if !item.note.is_empty() {
+                        tail = format!("{tail}  {}", item.note);
+                    }
+                    let room = (width as isize - name_width as isize - 5).max(1) as usize;
+                    if len(&tail) > room {
+                        tail = format!("{}{ellipsis}", truncate(&tail, room - 1));
+                    }
+                    format!("{mark} {name}  {dim}{tail}{reset}")
                 }
                 State::Running => {
                     let (current, total, show) = (item.current, item.total, item.show);
@@ -476,13 +503,21 @@ impl Task {
         }
     }
 
-    /// A few words shown next to the task while it runs: what it is doing right now. An empty
-    /// text takes them away.
+    /// The task was not needed. It is drawn as `– name  skipped`, and for the total it is done.
+    pub fn skip(&self) {
+        locked(&self.group).end(self.id, State::Skipped, "", None);
+    }
+
+    /// A few words next to the task; an empty text takes them away. On a running task they say
+    /// what it is doing right now, and they go when it ends. On a task that has ended they
+    /// stay, after its time: what came of it (`✓ Transfer  5m 37s  1,204 files`).
     pub fn note(&self, text: impl Display) {
         let mut group = locked(&self.group);
         group.items[self.id].note = text.to_string();
-        if group.items[self.id].state == State::Running {
-            group.draw(Draw::Soon);
+        match group.items[self.id].state {
+            State::Running => group.draw(Draw::Soon),
+            State::Waiting => {}
+            _ => group.draw(Draw::Now),
         }
     }
 

@@ -4099,3 +4099,115 @@ $ box -t 日本 "📱 phone" "plain text here"
 || 📱 phone        |
 || plain text here |
 |+-----------------+
+
+[rich] tasks: a task that was not needed
+% NO_COLOR=1
+$ tasks Backup Passcode Copy
+$ task_skip Passcode
+$ task Copy 1 2
+$ task_done Copy
+$ task Passcode 1 2
+$ tasks_done
+!– Passcode  skipped\e[K
+!· Copy\e[K
+!  Backup    ████████████░░░░░░░░░░░░  50%  1/2 <T>\e[K
+!\e[J\e[3A– Passcode  skipped\e[K
+!⠙ Copy      ████████████░░░░░░░░░░░░  50%  1/2\e[K
+!  Backup    ██████████████████░░░░░░  75%  1/2 <T>\e[K
+!\e[J\e[3A– Passcode  skipped\e[K
+!✓ Copy      <T>\e[K
+!  Backup    ████████████████████████ 100%  2/2 <T>\e[K
+!\e[J\e[3A– Passcode  skipped\e[K
+!✓ Copy      <T>\e[K
+!\e[J✓ Backup (2/2, <T>)
+
+[plain] tasks: a task that was not needed
+$ tasks Backup Passcode Copy
+$ task_skip Passcode
+$ task_done Copy
+$ tasks_done
+!Backup: 50% (1/2)
+![OK] Copy (<T>)
+![OK] Backup (2/2, <T>)
+
+[agent] tasks: a task that was not needed
+$ tasks Backup Passcode Copy
+$ task_skip Passcode
+$ task_done Copy
+$ tasks_done
+!Backup: 2/2 <T>
+
+[rich] tasks: a few words on a task that has ended
+% NO_COLOR=1
+$ tasks Backup Transfer Check Skip
+$ task Transfer 1 2
+$ task_note Transfer copying
+$ task_done -t 337 Transfer
+$ task_note Transfer "3.4 GB, 1,204 files"
+$ task_fail Check "no answer"
+$ task_note Check "tried 3 times"
+$ task_skip Skip
+$ task_note Skip "nothing new"
+$ task_note Transfer
+$ tasks_done
+!⠋ Transfer  ████████████░░░░░░░░░░░░  50%  1/2\e[K
+!· Check\e[K
+!· Skip\e[K
+!  Backup    ████░░░░░░░░░░░░░░░░░░░░  16%  0/3 <T>\e[K
+!\e[J\e[4A⠙ Transfer  ████████████░░░░░░░░░░░░  50%  1/2  copying\e[K
+!· Check\e[K
+!· Skip\e[K
+!  Backup    ████░░░░░░░░░░░░░░░░░░░░  16%  0/3 <T>\e[K
+!\e[J\e[4A✓ Transfer  5m <T>\e[K
+!· Check\e[K
+!· Skip\e[K
+!  Backup    ████████░░░░░░░░░░░░░░░░  33%  1/3 <T>\e[K
+!\e[J\e[4A✓ Transfer  5m <T>  3.4 GB, 1,204 files\e[K
+!· Check\e[K
+!· Skip\e[K
+!  Backup    ████████░░░░░░░░░░░░░░░░  33%  1/3 <T>\e[K
+!\e[J\e[4A✓ Transfer  5m <T>  3.4 GB, 1,204 files\e[K
+!✗ Check     no answer\e[K
+!· Skip\e[K
+!  Backup    ████████░░░░░░░░░░░░░░░░  33%  1/3 <T>\e[K
+!\e[J\e[4A✓ Transfer  5m <T>  3.4 GB, 1,204 files\e[K
+!✗ Check     no answer  tried 3 times\e[K
+!· Skip\e[K
+!  Backup    ████████░░░░░░░░░░░░░░░░  33%  1/3 <T>\e[K
+!\e[J\e[4A✓ Transfer  5m <T>  3.4 GB, 1,204 files\e[K
+!✗ Check     no answer  tried 3 times\e[K
+!– Skip      skipped\e[K
+!  Backup    ████████████████░░░░░░░░  66%  2/3 <T>\e[K
+!\e[J\e[4A✓ Transfer  5m <T>  3.4 GB, 1,204 files\e[K
+!✗ Check     no answer  tried 3 times\e[K
+!– Skip      skipped  nothing new\e[K
+!  Backup    ████████████████░░░░░░░░  66%  2/3 <T>\e[K
+!\e[J\e[4A✓ Transfer  5m <T>\e[K
+!✗ Check     no answer  tried 3 times\e[K
+!– Skip      skipped  nothing new\e[K
+!  Backup    ████████████████░░░░░░░░  66%  2/3 <T>\e[K
+!\e[J\e[4A✓ Transfer  5m <T>\e[K
+!✗ Check     no answer  tried 3 times\e[K
+!– Skip      skipped  nothing new\e[K
+!\e[J✗ Backup (2/3, <T>)
+= 1
+
+[rich] tasks: the words on a task that has ended are cut to the terminal
+% NO_COLOR=1
+% COLUMNS=30
+$ tasks Backup Transfer
+$ task_fail Transfer "a reason that is much too long for this terminal"
+$ tasks_done
+!✗ Transfer  a reason that is…\e[K
+!  Backup    ░░░░   0%  0/1 <T>\e[K
+!\e[J\e[2A✗ Transfer  a reason that is…\e[K
+!\e[J✗ Backup (0/1, <T>)
+= 1
+
+[plain] tasks: words on a task are for people at a terminal
+$ tasks Backup Transfer
+$ task_done -t 337 Transfer
+$ task_note Transfer "3.4 GB, 1,204 files"
+$ tasks_done
+![OK] Transfer (5m <T>)
+![OK] Backup (1/1, <T>)

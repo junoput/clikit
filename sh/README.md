@@ -241,8 +241,8 @@ are off.
 | `cli_progress_done` | end the bar early |
 | `cli_tasks [-t SECONDS] TITLE [NAME\|WEIGHT\|SHOW]...` | several tasks under one total: name them |
 | `cli_task [-t SECONDS] NAME [CURRENT TOTAL]` | a task is running; at TOTAL it is done |
-| `cli_task_note NAME [TEXT]` | a few words next to a running task |
-| `cli_task_done [-t SECONDS] NAME`, `cli_task_fail NAME [TEXT]` | how a task ended |
+| `cli_task_note NAME [TEXT]` | a few words next to a task: what it is doing, or, once it has ended, what came of it |
+| `cli_task_done [-t SECONDS] NAME`, `cli_task_fail NAME [TEXT]`, `cli_task_skip NAME` | how a task ended |
 | `cli_tasks_done` | end the group; exit status 1 if a task failed |
 | `cli_spin LABEL CMD...` | spinner while the command runs; its output shows only if it fails |
 

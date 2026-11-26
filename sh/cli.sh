@@ -83,13 +83,13 @@ _cli_setup() {
     _CLI_G_BULLET='•' _CLI_G_PTR='❯' _CLI_G_ON='◉' _CLI_G_OFF='○' _CLI_G_FULL='█' _CLI_G_EMPTY='░'
     _CLI_G_H='─' _CLI_G_V='│' _CLI_G_TL='╭' _CLI_G_TR='╮' _CLI_G_BL='╰' _CLI_G_BR='╯'
     _CLI_G_SPIN='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏' _CLI_G_SEP='›' _CLI_G_KEYS='↑/↓' _CLI_G_ELL='…'
-    _CLI_G_TT='┬' _CLI_G_TB='┴' _CLI_G_TLEFT='├' _CLI_G_TRIGHT='┤' _CLI_G_TX='┼' _CLI_G_NODE='●' _CLI_G_MANY='◉' _CLI_G_STOP='■'
+    _CLI_G_TT='┬' _CLI_G_TB='┴' _CLI_G_TLEFT='├' _CLI_G_TRIGHT='┤' _CLI_G_TX='┼' _CLI_G_NODE='●' _CLI_G_MANY='◉' _CLI_G_STOP='■' _CLI_G_SKIP='–'
   else
     _CLI_G_OK='+' _CLI_G_ERR='x' _CLI_G_WARN='!' _CLI_G_INFO='i' _CLI_G_DOT='.' _CLI_G_STEP='>'
     _CLI_G_BULLET='-' _CLI_G_PTR='>' _CLI_G_ON='[x]' _CLI_G_OFF='[ ]' _CLI_G_FULL='#' _CLI_G_EMPTY='-'
     _CLI_G_H='-' _CLI_G_V='|' _CLI_G_TL='+' _CLI_G_TR='+' _CLI_G_BL='+' _CLI_G_BR='+'
     _CLI_G_SPIN='|/-\' _CLI_G_SEP=':' _CLI_G_KEYS='up/down' _CLI_G_ELL='~'
-    _CLI_G_TT='+' _CLI_G_TB='+' _CLI_G_TLEFT='+' _CLI_G_TRIGHT='+' _CLI_G_TX='+' _CLI_G_NODE='*' _CLI_G_MANY='#' _CLI_G_STOP='='
+    _CLI_G_TT='+' _CLI_G_TB='+' _CLI_G_TLEFT='+' _CLI_G_TRIGHT='+' _CLI_G_TX='+' _CLI_G_NODE='*' _CLI_G_MANY='#' _CLI_G_STOP='=' _CLI_G_SKIP='-'
   fi
 }
 
@@ -1398,7 +1398,7 @@ cli_task() {  # cli_task [-t SECONDS] NAME [CURRENT TOTAL]   a task of the group
   _cli_task_find "$1"; i=$_CLI_R
   eval "s=\$_cli_ks$i"
   case $s in
-    d|f) return 0;;  # what has ended stays ended
+    d|f|s) return 0;;  # what has ended stays ended
     w) _cli_now; eval "_cli_k0$i=$_CLI_R _cli_ks$i=r";;
   esac
   if [ -n "$ago" ]; then _cli_now; eval "_cli_k0$i=$((_CLI_R - ago * 1000))"; fi
@@ -1415,23 +1415,32 @@ cli_task_done() {  # cli_task_done [-t SECONDS] NAME   a task of the group is do
   _cli_task_find "$1"; _cli_task_end "$_CLI_R" d '' "$took"
 }
 
-cli_task_note() {  # cli_task_note NAME [TEXT]   a few words shown next to a running task; no TEXT takes them away
+cli_task_skip() {  # cli_task_skip NAME   a task of the group was not needed; for the total it is done
+  _cli_task_find "$1"; _cli_task_end "$_CLI_R" s ''
+}
+
+cli_task_note() {  # cli_task_note NAME [TEXT]   a few words next to a task; no TEXT takes them away
+  # On a running task they say what it is doing, and go when it ends. On a task that has ended
+  # they stay: what came of it.
   local s=''
   _cli_task_find "$1"; eval "_cli_kq$_CLI_R=\${2:-} s=\$_cli_ks$_CLI_R"
-  if [ "$s" = r ]; then _cli_tasks_draw soon; fi
+  case $s in r) _cli_tasks_draw soon;; d|f|s) _cli_tasks_draw now;; esac
 }
 
 cli_task_fail() {  # cli_task_fail NAME [TEXT]   a task of the group failed; TEXT says why
   _cli_task_find "$1"; _cli_task_end "$_CLI_R" f "${2:-}"
 }
 
-_cli_task_end() {  # NUMBER d|f TEXT [TIME-TAKEN]
+_cli_task_end() {  # NUMBER d|f|s TEXT [TIME-TAKEN]
   local i=$1 s='' t0=0 name='' took=${4:-}
   eval "s=\$_cli_ks$i t0=\$_cli_k0$i name=\$_cli_kn$i"
-  if [ "$s" = d ] || [ "$s" = f ]; then return 0; fi
+  case $s in d|f|s) return 0;; esac
   if [ "$s" = w ]; then _cli_now; t0=$_CLI_R; fi
   if [ -z "$took" ]; then _cli_since "$t0"; took=$_CLI_R; fi
-  if [ "$2" = d ]; then
+  eval "_cli_kq$i=''"  # what it was doing is over
+  if [ "$2" = s ]; then
+    eval "_cli_ks$i=s _cli_kx$i=''"
+  elif [ "$2" = d ]; then
     eval "_cli_ks$i=d _cli_kx$i=\$took"
     if [ "$_CLI_MODE" = plain ]; then _cli_msg ok "$name ($took)"; fi
   else
@@ -1455,7 +1464,7 @@ _cli_tasks_draw() {  # now|soon|end   show the group as it stands: at once, not 
     pts=0
     if [ "$t" -gt 0 ]; then pts=$((c * 1000 / t)); fi
     case $s in
-      d) pts=1000; _CLI_K_DONE=$((_CLI_K_DONE + 1));;
+      d|s) pts=1000; _CLI_K_DONE=$((_CLI_K_DONE + 1));;
       f) _CLI_K_FAILED=$((_CLI_K_FAILED + 1));;
       w) pts=0; waiting=$((waiting + 1));;
     esac
@@ -1507,12 +1516,20 @@ _cli_tasks_draw() {  # now|soon|end   show the group as it stands: at once, not 
   i=0
   while [ "$i" -lt "$n" ]; do
     i=$((i + 1)); eval "s=\$_cli_ks$i c=\$_cli_kc$i t=\$_cli_kt$i t0=\$_cli_k0$i x=\$_cli_kx$i name=\$_cli_kn$i o=\$_cli_ko$i note=\$_cli_kq$i"
-    if [ "$many" -eq 1 ]; then case $s in w|d) continue;; esac; fi
+    if [ "$many" -eq 1 ]; then case $s in w|d|s) continue;; esac; fi
     _cli_fit "$name" "$nw" l; name=$_CLI_R
     case $s in
       w) line="$CLI_DIM$_CLI_G_DOT ${name%"${name##*[! ]}"}$CLI_RESET";;
-      d) line="$CLI_GREEN$_CLI_G_OK$CLI_RESET $name  $CLI_DIM$x$CLI_RESET";;
-      f) line="$CLI_RED$_CLI_G_ERR$CLI_RESET $name  $CLI_DIM${x:-failed}$CLI_RESET";;
+      d|f|s)
+         case $s in
+           d) line="$CLI_GREEN$_CLI_G_OK$CLI_RESET $name"; tail=$x;;
+           f) line="$CLI_RED$_CLI_G_ERR$CLI_RESET $name"; tail=${x:-failed};;
+           *) line="$CLI_DIM$_CLI_G_SKIP$CLI_RESET $name"; tail=skipped;;
+         esac
+         if [ -n "$note" ]; then tail="$tail  $note"; fi
+         room=$((width - nw - 5)); if [ "$room" -lt 1 ]; then room=1; fi
+         if [ "${#tail}" -gt "$room" ]; then tail="${tail:0:$((room - 1))}$_CLI_G_ELL"; fi
+         line="$line  $CLI_DIM$tail$CLI_RESET";;
       *) # A task still running when the group ends was stopped, and says so.
          if [ -n "$end" ]; then line="$CLI_YELLOW$_CLI_G_STOP$CLI_RESET $name"; else line="$CLI_CYAN$frame$CLI_RESET $name"; fi
          tail=''
