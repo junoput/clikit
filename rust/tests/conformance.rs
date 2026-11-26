@@ -194,6 +194,7 @@ fn call(words: &[String], running: &mut Running) -> i32 {
                 match rows {
                     [flag, value, rest @ ..] if flag == "-s" => (separator, rows) = (value.as_str(), rest),
                     [flag, value, rest @ ..] if flag == "-a" => (table, rows) = (table.align(value), rest),
+                    [flag, value, rest @ ..] if flag == "-k" => (table, rows) = (table.keep(value), rest),
                     [flag, rest @ ..] if flag == "-b" => (table, rows) = (table.border(true), rest),
                     [flag, rest @ ..] if flag == "-H" => (table, rows) = (table.header(false), rest),
                     _ => break,
@@ -397,7 +398,8 @@ fn conformance() {
         let run = session.run(|| {
             let mut running = Running::default();
             for line in &case.calls {
-                let words = clikit::split_words(line).expect("a well-formed call");
+                // `\e` in a call is an escape character.
+                let words = clikit::split_words(&line.replace("\\e", "\x1b")).expect("a well-formed call");
                 status = call(&words, &mut running);
             }
         });

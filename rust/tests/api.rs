@@ -117,10 +117,33 @@ fn sizes_and_what_a_task_shows() {
         });
     let lines: Vec<&str> = run.err.lines().collect();
     assert!(lines[0].contains("33%  10.9 GB/32.8 GB  11.2 MB/s  33m "), "{}", lines[0]);
+    // In its first second a task has no rate yet.
+    let fresh = Session::new(Mode::Rich)
+        .env("NO_COLOR", "1")
+        .run(|| clikit::Tasks::new("Copy").add("Files", 1).rate().eta().set(5, 10));
+    assert!(fresh.err.contains("50%  5/10\x1b[K"), "{:?}", fresh.err);
     assert!(run.err.contains(" left  verifying"), "the note comes last: {}", run.err);
     assert!(run.err.contains("✓ Earlier  14m 02s"), "{}", run.err);
     assert!(run.err.contains("● Copy (1/2, 2h 00m)"), "{}", run.err);
     assert!(run.err.contains("■ Photos"), "a task still running at the end was stopped: {}", run.err);
+}
+
+#[test]
+fn tables_measure_what_a_terminal_shows() {
+    let online = "\x1b[32monline\x1b[0m";
+    let run = Session::new(Mode::Rich).env("NO_COLOR", "1").env("LANG", "en_US.UTF-8").env("COLUMNS", "40").run(|| {
+        clikit::table(&[["Name", "State"], ["📱 Küche", online], ["日本語", "idle"]]);
+        clikit::Table::new()
+            .keep("Id")
+            .keep("7")
+            .print(&[["Name", "State", "Id"], ["A device with a long name", "online", "00008150-001A2B3C4D5E6F78"]]);
+    });
+    let lines: Vec<&str> = run.out.lines().collect();
+    assert_eq!(
+        lines[..4],
+        ["  Name      State", "  ────────  ──────", "  📱 Küche  \x1b[32monline\x1b[0m", "  日本語    idle"]
+    );
+    assert_eq!(lines[6], "  A d…  onli…  00008150-001A2B3C4D5E6F78", "the column that is kept is whole");
 }
 
 #[test]

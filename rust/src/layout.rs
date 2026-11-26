@@ -3,7 +3,7 @@
 use std::fmt::Display;
 
 use crate::ctx::{self, Mode, BOLD, CYAN, DIM, GRAY, RESET};
-use crate::text::{len, pad};
+use crate::text::{len, pad, width};
 
 /// A blank line, for people only.
 pub fn nl() {
@@ -53,9 +53,9 @@ pub fn boxed<S: AsRef<str>>(title: Option<&str>, lines: &[S]) {
         ctx::out(&text);
         return;
     }
-    let mut w = lines.iter().map(|line| len(line.as_ref())).max().unwrap_or(0);
+    let mut w = lines.iter().map(|line| width(line.as_ref())).max().unwrap_or(0);
     if !title.is_empty() {
-        w = w.max(len(title) + 2);
+        w = w.max(width(title) + 2);
     }
     let inner = w + 2;
     let (h, v) = (t.g("─", "-"), t.g("│", "|"));
@@ -63,7 +63,7 @@ pub fn boxed<S: AsRef<str>>(title: Option<&str>, lines: &[S]) {
     let top = if title.is_empty() {
         h.repeat(inner)
     } else {
-        format!("{h} {reset}{}{title}{reset}{gray} {}", t.c(BOLD), h.repeat(inner - len(title) - 3))
+        format!("{h} {reset}{}{title}{reset}{gray} {}", t.c(BOLD), h.repeat(inner - width(title) - 3))
     };
     text.push_str(&format!("{gray}{}{top}{}{reset}\n", t.g("╭", "+"), t.g("╮", "+")));
     for line in lines {
@@ -104,7 +104,7 @@ pub fn list_numbered<S: AsRef<str>>(items: &[S]) {
 /// Aligned `key: value` lines.
 pub fn kv<K: AsRef<str>, V: AsRef<str>>(pairs: &[(K, V)]) {
     let t = ctx::theme();
-    let w = pairs.iter().map(|(key, _)| len(key.as_ref())).max().unwrap_or(0);
+    let w = pairs.iter().map(|(key, _)| width(key.as_ref())).max().unwrap_or(0);
     let mut text = String::new();
     for (key, value) in pairs {
         let (key, value) = (key.as_ref(), value.as_ref());
@@ -130,6 +130,7 @@ pub struct Table {
     align: String,
     border: bool,
     header: bool,
+    keep: Vec<String>,
 }
 
 impl Default for Table {
@@ -141,13 +142,22 @@ impl Default for Table {
 impl Table {
     /// The first row is a header, no borders, numbers aligned right and everything else left.
     pub fn new() -> Table {
-        Table { align: String::new(), border: false, header: true }
+        Table { align: String::new(), border: false, header: true, keep: Vec::new() }
     }
 
     /// Alignment per column: `l`, `r` or `c`. `"lrc"` is left, right, centred. A column the
     /// text does not reach keeps the default: right when it holds only numbers, otherwise left.
     pub fn align(mut self, columns: &str) -> Table {
         self.align = columns.to_string();
+        self
+    }
+
+    /// Never cut this column when the table is too wide for the terminal: an identifier, say,
+    /// that is useless without its end. `column` is the column's header, or its number
+    /// counted from 1. Call it once per column. When nothing is left to cut, the table runs
+    /// past the edge.
+    pub fn keep(mut self, column: &str) -> Table {
+        self.keep.push(column.to_string());
         self
     }
 
@@ -200,7 +210,7 @@ impl Table {
                     widths.push(0);
                     numeric.push(None);
                 }
-                widths[i] = widths[i].max(len(cell));
+                widths[i] = widths[i].max(width(cell));
                 if !cell.is_empty() && numeric[i] != Some(false) && (r > 0 || !self.header) {
                     numeric[i] = Some(is_number(cell));
                 }
@@ -214,20 +224,29 @@ impl Table {
                 _ => 'l',
             })
             .collect();
+        // The columns that are never cut: by header first, then by number.
+        let mut kept = vec![false; n];
+        for column in &self.keep {
+            let by_header = if self.header { rows[0].iter().position(|cell| cell == column) } else { None };
+            let by_number = || column.parse::<usize>().ok().filter(|i| (1..=n).contains(i)).map(|i| i - 1);
+            let digits = !column.is_empty() && column.bytes().all(|b| b.is_ascii_digit());
+            if let Some(i) = by_header.or_else(|| if digits { by_number() } else { None }) {
+                kept[i] = true;
+            }
+        }
         if t.mode == Mode::Rich {
-            // Too wide for the terminal: shorten the widest columns.
+            // Too wide for the terminal: shorten the widest column that may be cut.
             let frame = if self.border { 3 * n + 1 } else { 2 * n };
             let mut over = (widths.iter().sum::<usize>() + frame) as isize - ctx::width() as isize;
             while over > 0 {
-                let mut widest = 0;
-                for i in 1..n {
-                    if widths[i] > widths[widest] {
-                        widest = i;
+                let mut widest: Option<usize> = None;
+                for i in 0..n {
+                    if !kept[i] && widths[i] > widest.map_or(0, |widest| widths[widest]) {
+                        widest = Some(i);
                     }
                 }
-                if widths[widest] <= 4 {
-                    break;
-                }
+                // Nothing left to cut: the table runs past the edge.
+                let Some(widest) = widest.filter(|widest| widths[*widest] > 4) else { break };
                 widths[widest] -= 1;
                 over -= 1;
             }
@@ -283,13 +302,13 @@ impl Table {
 }
 
 /// Cut `text` to `width` if it is longer, then pad it: `l` left, `r` right, `c` centred.
-pub(crate) fn fit(text: &str, width: usize, align: char, ellipsis: &str) -> String {
-    let text = if len(text) > width {
-        format!("{}{ellipsis}", crate::text::truncate(text, width.saturating_sub(1)))
+pub(crate) fn fit(text: &str, columns: usize, align: char, ellipsis: &str) -> String {
+    let text = if width(text) > columns {
+        format!("{}{ellipsis}", crate::text::cut(text, columns.saturating_sub(1)))
     } else {
         text.to_string()
     };
-    let gap = width.saturating_sub(len(&text));
+    let gap = columns.saturating_sub(width(&text));
     match align {
         'r' => format!("{}{text}", " ".repeat(gap)),
         'c' => format!("{}{text}{}", " ".repeat(gap / 2), " ".repeat(gap - gap / 2)),

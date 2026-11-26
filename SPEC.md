@@ -100,8 +100,12 @@ In rich mode only the symbol is coloured: blue, green, yellow, red, gray.
 | `timeline -v` | one row per event, one column per track | the same in ASCII | the same as without `-v` |
 | `tree` | the paths as a tree, directories in blue, notes dimmed in one column | the same in ASCII | one line per node, a space of indent per level, the note after a tab |
 
-Widths count characters, so text passed to `box`, `table`, `timeline` and `tree` must not contain
-escape codes.
+`table`, `kv` and `box` measure text in the columns a terminal gives it: an escape sequence
+(`ESC [ ... letter`, a colour) takes none, nor does a mark that sits on the character before it
+(U+0300-036F, 200B-200F, 20D0-20FF, FE00-FE0F), and CJK and most emoji take two (U+1100-115F,
+2E80-303E, 3041-33FF, 3400-4DBF, 4E00-9FFF, A000-A4CF, AC00-D7A3, F900-FAFF, FE30-FE4F,
+FF00-FF60, FFE0-FFE6, 1F300-1F64F, 1F680-1F6FF, 1F900-1F9FF, 20000-3FFFD). So a cell may be
+coloured. `timeline` and `tree` count characters: their text must be plain.
 
 #### Tables
 
@@ -116,8 +120,11 @@ spaces.
 - **Borders.** `-b` draws a frame around the cells, with a line under the header.
 - **No header.** `-H` treats every row as data: aligned columns and nothing else.
 - **Width.** In rich mode a table wider than the terminal has its widest column shortened, one
-  character at a time, until the table fits or no column is wider than four. Cut cells end in
-  `…`. Plain and agent output is never cut.
+  column at a time, until the table fits or no column is wider than four. Cut cells end in
+  `…`, and a coloured cell that is cut loses its colour. Plain and agent output is never cut.
+- **Columns that are never cut.** `-k COLUMN`, once per column, names one by its header, or by
+  its number counted from 1 (the header wins when both fit). The others are shortened instead;
+  when none of them is wider than four, the table runs past the edge of the terminal.
 
 An agent gets the rows tab-separated whatever the options.
 
@@ -494,7 +501,8 @@ $ select Fruit apple banana cherry
 | `= N` | the expected exit status of the last call; 0 when absent |
 
 In input and expected lines, `\e` is escape, `\t` tab, `\r` carriage return, `\s` a space and
-`\b` backspace (the DEL character). An expected line that ends in `\c` has no newline after it.
+`\b` backspace (the DEL character). In a call, `\e` is an escape character too. An expected line
+that ends in `\c` has no newline after it.
 `<T>` stands for any duration. Cases run in the `conformance` directory, and the `tree -p` and
 `browse` cases read the files in `conformance/files`.
 

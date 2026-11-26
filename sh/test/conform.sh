@@ -53,7 +53,7 @@ while IFS= read -r line || [ -n "$line" ]; do
     '') finish;;
     '['*) finish; mode=${line#\[}; mode=${mode%%\]*}; name=${line#*\] };;
     '% '*) line=${line#% }; envs="${envs}export ${line%%=*}='${line#*=}'$NL";;
-    '$ '*) cmds="${cmds}cli_${line#\$ }$NL";;
+    '$ '*) line=${line//\\e/$ESC}; cmds="${cmds}cli_${line#\$ }$NL";;  # \e in a call is an escape character
     '<'*) line=${line#<}; decode "${line# }"; input="$input$R"; has_input=1;;
     '|'*) decode "${line#|}"; want_out="$want_out$R";;
     '!'*) decode "${line#!}"; want_err="$want_err$R";;

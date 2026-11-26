@@ -74,6 +74,7 @@ each call in each mode.
 | `kv(&[(key, value)])` | `cli_kv` | aligned `key: value` lines |
 | `table(&rows)` | `cli_table` | the first row is the header; numbers are right-aligned |
 | `Table::new().border(true).align("lrc").header(false).print(&rows)` | `cli_table -b -a lrc -H` | a table with options |
+| `Table::new().keep("Id").print(&rows)` | `cli_table -k Id` | a column that is never cut when the table is too wide |
 | `timeline(&rows)` | `cli_timeline` | events on tracks along a time axis; a row is `[when, track, label, from]` |
 | `Timeline::new().vertical(true).newest_first(true).print(&rows)` | `cli_timeline -v -r` | one row per event |
 | `tree(&rows)` | `cli_tree` | a tree of paths; a row is `[path, note]` |
@@ -268,8 +269,10 @@ use `clikit::testing::print` for output a test needs to see.
 - Key-driven prompts use `stty` to read single keys, so they exist on Unix only. On Windows the
   prompts are the numbered, line-based ones. Windows is untested.
 - A line longer than the terminal is wide confuses the line editor.
-- Text given to `boxed`, `table`, `timeline` and `tree` must be plain. Wide characters (CJK, emoji) count as
-  one column.
+- `table`, `kv` and `boxed` measure what a terminal shows: colour codes take no room (a cell may
+  be `style("green", "online")`), emoji and CJK two columns. `timeline` and `tree` count
+  characters, so text given to them must be plain. A coloured cell that has to be cut loses its
+  colour.
 - `tree_dir` does not follow symbolic links to directories; `browse` opens them when asked.
 - While a `Progress` or a `Tasks` group is on the screen, what this crate prints (status lines
   and content) goes above it. What you print yourself, or a child process prints, lands in the

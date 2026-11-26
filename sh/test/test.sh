@@ -105,6 +105,8 @@ check "plain table" "  Name   Role${NL}  -----  ----${NL}  Ana    dev${NL}  Bjö
 check "table with another separator" "  a   b${NL}  --  -${NL}  cc  d" "$(cli_table -s , 'a,b' 'cc,d')"
 check "table from stdin" "  a  b${NL}  -  -${NL}  c  d" "$(printf 'a|b\nc|d\n' | cli_table)"
 check "table aligns numbers right" "  Item   Qty${NL}  -----  ---${NL}  Apple    3${NL}  Melon   12" "$(cli_table 'Item|Qty' 'Apple|3' 'Melon|12')"
+check "table: coloured and wide cells line up" "  a   b${NL}  --  ------${NL}  日  ${ESC}[32monline${ESC}[0m${NL}  x   idle" "$(cli_table 'a|b' "日|${ESC}[32monline${ESC}[0m" 'x|idle')"
+check "table leaves no variables behind" "" "$(cli_table -k a 'a|b' 'c|d' >/dev/null; set | grep '^_cli_\(row\|w\|keep\|num\|a\)[0-9]' || true)"
 check "table with borders" "+-------+-----+${NL}| Item  | Qty |${NL}+-------+-----+${NL}| Apple |   3 |${NL}+-------+-----+" "$(cli_table -b 'Item|Qty' 'Apple|3')"
 check "table without a header" "  a    1${NL}  bbb  2" "$(cli_table -H 'a|1' 'bbb|2')"
 check "table with explicit alignment" "    a  b${NL}  ---  -${NL}  ccc  d" "$(cli_table -a rl 'a|b' 'ccc|d')"

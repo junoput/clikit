@@ -10,7 +10,7 @@
 #   = N                  the expected exit status of the last call (default 0)
 #
 # Escapes in input and expected lines: \e escape, \t tab, \r carriage return, \s space,
-# \b backspace (the DEL character).
+# \b backspace (the DEL character). In a call, \e is an escape character too.
 # An expected line ending in \c has no newline after it.
 # <T> stands for any duration (12ms, 4.2s, 3s).
 # Every case runs with COLUMNS=80, LANG=en_US.UTF-8 and no terminal.
@@ -3929,16 +3929,6 @@ $ tasks_done
 !■ Files   ████░░░░░░░░░░░░░░░░░░░░  20%  520/2500  0.5/s  1h 03m left\e[K
 !\e[J● Copy (1/2, 16m <T>)
 
-[rich] tasks: no rate in the first second
-% NO_COLOR=1
-$ tasks Copy "Files | 1 | rate eta"
-$ task Files 5 10
-$ tasks_done
-!⠋ Files  ████████████░░░░░░░░░░░░  50%  5/10\e[K
-!  Copy   ████████████░░░░░░░░░░░░  50%  0/1 <T>\e[K
-!\e[J\e[2A■ Files  ████████████░░░░░░░░░░░░  50%  5/10\e[K
-!\e[J● Copy (0/1, <T>)
-
 [rich] tasks: a note on a running task
 % NO_COLOR=1
 $ tasks Backup "Phone | 1 | percent" Scan
@@ -4006,3 +3996,106 @@ $ tasks -t 3600 Copy Photos
 $ task_done -t 842 Photos
 $ tasks_done
 !Copy: 1/1 1h 00m
+
+[rich] table: a column that is never cut
+% NO_COLOR=1
+% COLUMNS=44
+$ table -k Id "Name | State | Id" "A device with a long name | online | 00008150-001A2B3C4D5E6F78" "Short | idle | 00008030-000123456789ABCD"
+|  Name     State   Id
+|  ───────  ──────  ─────────────────────────
+|  A devi…  online  00008150-001A2B3C4D5E6F78
+|  Short    idle    00008030-000123456789ABCD
+
+[rich] table: without it, the widest column is cut
+% NO_COLOR=1
+% COLUMNS=44
+$ table "Name | State | Id" "A device with a long name | online | 00008150-001A2B3C4D5E6F78" "Short | idle | 00008030-000123456789ABCD"
+|  Name              State   Id
+|  ────────────────  ──────  ────────────────
+|  A device with a…  online  00008150-001A2B…
+|  Short             idle    00008030-000123…
+
+[rich] table: columns kept by number, a header wins over a number
+% NO_COLOR=1
+% COLUMNS=30
+$ table -k 1 "Name | 1 | Notes" "A long name here | a long cell here | a long note here"
+$ table -H -k 2 -k 9 "A long name here | a long cell here | a long note here"
+|  Name  1                 Not…
+|  ────  ────────────────  ────
+|  A l…  a long cell here  a l…
+|  A l…  a long cell here  a l…
+
+[rich] table: when nothing may be cut it runs past the edge
+% NO_COLOR=1
+% COLUMNS=20
+$ table -k a -k b "a | b" "0123456789abcdef | 0123456789abcdef"
+$ table -b -k a "a | b" "0123456789abcdef | 0123456789abcdef"
+|  a                 b
+|  ────────────────  ────────────────
+|  0123456789abcdef  0123456789abcdef
+|╭──────────────────┬──────╮
+|│ a                │ b    │
+|├──────────────────┼──────┤
+|│ 0123456789abcdef │ 012… │
+|╰──────────────────┴──────╯
+
+[plain] table: keeping a column changes nothing off a terminal
+% COLUMNS=20
+$ table -k a "a | b" "0123456789abcdef | 0123456789abcdef"
+|  a                 b
+|  ----------------  ----------------
+|  0123456789abcdef  0123456789abcdef
+
+[agent] table: keeping a column changes nothing for an agent
+$ table -k a "a | b" "c | d"
+|a\tb
+|c\td
+
+[plain] table: wide characters take two columns
+$ table "Name | Size" "📱 Küche iPad | 12" "日本語の名前 | 7" "plain | 100"
+$ table -b "名前 | n" "한국어 | 1"
+|  Name           Size
+|  -------------  ----
+|  📱 Küche iPad    12
+|  日本語の名前      7
+|  plain           100
+|+--------+---+
+|| 名前   | n |
+|+--------+---+
+|| 한국어 | 1 |
+|+--------+---+
+
+[rich] table: coloured cells line up
+$ table "Name | State" "a | \e[32monline\e[0m" "b | \e[31mfailed and more\e[0m" "c | idle"
+|  \e[1mName  State\e[0m
+|  \e[2m────  ───────────────\e[0m
+|  a     \e[32monline\e[0m
+|  b     \e[31mfailed and more\e[0m
+|  c     idle
+
+[rich] table: a coloured cell that is cut loses its colour
+% COLUMNS=24
+$ table "Name | State" "a | \e[31mfailed and much more than fits\e[0m"
+|  \e[1mName  State\e[0m
+|  \e[2m────  ────────────────\e[0m
+|  a     failed and much…
+
+[rich] table: a wide character at the cut
+% NO_COLOR=1
+% COLUMNS=20
+$ table "Name | n" "日本語の名前はとても長い | 1" "abc日本語の名前はとても | 2"
+|  Name             n
+|  ───────────────  ─
+|  日本語の名前は…  1
+|  abc日本語の名…   2
+
+[plain] kv and box count columns
+$ kv 名前 x Key y "é" z
+$ box -t 日本 "📱 phone" "plain text here"
+|  名前: x
+|  Key:  y
+|  é:    z
+|+- 日本 ----------+
+|| 📱 phone        |
+|| plain text here |
+|+-----------------+

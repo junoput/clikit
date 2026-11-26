@@ -133,7 +133,7 @@ Run `./cli.sh` for this list with each function's arguments.
 | `cli_box [-t TITLE] LINE...` | text in a frame |
 | `cli_list [-n] ITEM...` | bullets, or numbers with `-n` |
 | `cli_kv KEY VALUE...` | aligned `key: value` lines |
-| `cli_table [-s SEP] [-a ALIGN] [-b] [-H] HEADER ROW...` | columns; cells split on `\|` by default |
+| `cli_table [-s SEP] [-a ALIGN] [-k COLUMN]... [-b] [-H] HEADER ROW...` | columns; cells split on `\|` by default |
 | `cli_timeline [-v] [-r] [-s SEP] ROW...` | events on tracks, along a time axis or one per row |
 | `cli_tree [-d DEPTH] [-s SEP] ROW...` | a tree of paths; a row is `PATH\|NOTE` |
 | `cli_tree [-a] [-d DEPTH] -p DIR` | the files under a directory as a tree |
@@ -150,6 +150,14 @@ cli_table -H "config | ~/.config/app.toml" "cache | ~/.cache/app"        # no he
 ```
 
 At a terminal, a table wider than the screen has its widest column cut, with `…` at the end.
+Name the columns that must stay whole, an identifier for one, with `-k`:
+
+```sh
+cli_table -k Id "Name | State | Id" "$name | online | 00008150-001A2B3C4D5E6F78"   # Name is cut, Id never
+```
+
+Cells may be coloured (`"$(cli_style green online)"`), and emoji and CJK text take the two
+columns a terminal gives them.
 
 A timeline shows events over time. Each row is `WHEN | TRACK | LABEL | FROM`: a track is whatever
 the events belong to (a device, a branch, an album), and `FROM` is optional and names the track
@@ -399,8 +407,9 @@ untouched, so it can do its own parsing.
 
 ## Limits
 
-- Text given to `cli_box`, `cli_table`, `cli_timeline` and `cli_tree` must be plain: colour codes inside it
-  break the alignment. Wide characters (CJK, emoji) count as one column.
+- `cli_table`, `cli_kv` and `cli_box` measure what a terminal shows: colour codes take no room,
+  emoji and CJK two columns. `cli_timeline` and `cli_tree` count characters, so text given to
+  them must be plain. A coloured cell that has to be cut loses its colour.
 - A timeline does not know time zones or calendars other than the Gregorian one: the zone in
   `2026-03-14T09:30+01:00` is read and ignored.
 - Along the axis, a link between two events that fall in the same column is hidden by them.

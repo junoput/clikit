@@ -4,9 +4,72 @@ pub(crate) fn len(text: &str) -> usize {
     text.chars().count()
 }
 
-pub(crate) fn pad(text: &str, width: usize) -> String {
+/// The columns `text` takes on a terminal. Escape sequences take none, marks that sit on the
+/// character before them take none, CJK and most emoji take two.
+pub(crate) fn width(text: &str) -> usize {
+    visible(text).map(columns).sum()
+}
+
+/// The characters of `text` without its escape sequences (`ESC [ ... letter`).
+fn visible(text: &str) -> impl Iterator<Item = char> + '_ {
+    let mut chars = text.chars().peekable();
+    std::iter::from_fn(move || loop {
+        let c = chars.next()?;
+        if c != '\x1b' {
+            return Some(c);
+        }
+        if chars.peek() == Some(&'[') {
+            chars.next();
+            for inside in chars.by_ref() {
+                if inside.is_ascii_alphabetic() {
+                    break;
+                }
+            }
+        }
+    })
+}
+
+fn columns(c: char) -> usize {
+    let c = c as u32;
+    match c {
+        0..=0x1F | 0x7F => 0,
+        0x300..=0x36F | 0x200B..=0x200F | 0x20D0..=0x20FF | 0xFE00..=0xFE0F => 0,
+        0x1100..=0x115F
+        | 0x2E80..=0x303E
+        | 0x3041..=0x33FF
+        | 0x3400..=0x4DBF
+        | 0x4E00..=0x9FFF
+        | 0xA000..=0xA4CF
+        | 0xAC00..=0xD7A3
+        | 0xF900..=0xFAFF
+        | 0xFE30..=0xFE4F
+        | 0xFF00..=0xFF60
+        | 0xFFE0..=0xFFE6
+        | 0x1F300..=0x1F64F
+        | 0x1F680..=0x1F6FF
+        | 0x1F900..=0x1F9FF
+        | 0x20000..=0x3FFFD => 2,
+        _ => 1,
+    }
+}
+
+/// As much of `text` as fits in `room` columns. Escape sequences are dropped: a cut in the
+/// middle of coloured text would leave the colour on.
+pub(crate) fn cut(text: &str, room: usize) -> String {
+    let (mut kept, mut used) = (String::new(), 0);
+    for c in visible(text) {
+        if used + columns(c) > room {
+            break;
+        }
+        used += columns(c);
+        kept.push(c);
+    }
+    kept
+}
+
+pub(crate) fn pad(text: &str, columns: usize) -> String {
     let mut padded = String::from(text);
-    for _ in len(text)..width {
+    for _ in width(text)..columns {
         padded.push(' ');
     }
     padded

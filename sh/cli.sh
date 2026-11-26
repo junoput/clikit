@@ -137,10 +137,79 @@ _cli_rep() {  # CHAR COUNT
   if [ "$2" -gt 0 ]; then printf -v _CLI_R '%*s' "$2" ''; _CLI_R=${_CLI_R// /$1}; fi
 }
 
-_cli_pad() {  # TEXT WIDTH   pad on the right, counting characters, not bytes
-  _CLI_R=''
-  if [ "${#1}" -lt "$2" ]; then printf -v _CLI_R '%*s' $(($2 - ${#1})) ''; fi
-  _CLI_R="$1$_CLI_R"
+_cli_len() {  # TEXT → $_CLI_R   the columns it takes: escape codes none, wide characters (CJK, emoji) two
+  case $1 in
+    *[!\ -~]*) _cli_len_slow "$1";;  # something other than plain ASCII: look at each character
+    *) _CLI_R=${#1};;
+  esac
+}
+
+_cli_len_slow() {  # TEXT → $_CLI_R   byte by byte, so that it works in every shell
+  local LC_ALL=C s=$1 i=0 n=0 b=0 cp=0 more=0 w=0
+  n=${#s}
+  while [ "$i" -lt "$n" ]; do
+    printf -v b '%d' "'${s:$i:1}"; b=$((b & 255)); i=$((i + 1))
+    if [ "$b" -eq 27 ]; then  # an escape sequence: ESC [ ... letter
+      if [ "${s:$i:1}" = '[' ]; then
+        i=$((i + 1))
+        while [ "$i" -lt "$n" ]; do
+          i=$((i + 1))
+          case ${s:$((i - 1)):1} in [a-zA-Z]) break;; esac
+        done
+      fi
+      continue
+    fi
+    if [ "$b" -lt 128 ]; then
+      if [ "$b" -ge 32 ] && [ "$b" -ne 127 ]; then w=$((w + 1)); fi
+      continue
+    fi
+    if [ "$b" -ge 240 ]; then cp=$((b & 7)) more=3
+    elif [ "$b" -ge 224 ]; then cp=$((b & 15)) more=2
+    elif [ "$b" -ge 192 ]; then cp=$((b & 31)) more=1
+    else continue; fi
+    while [ "$more" -gt 0 ] && [ "$i" -lt "$n" ]; do
+      printf -v b '%d' "'${s:$i:1}"; cp=$(((cp << 6) | (b & 63))); i=$((i + 1)); more=$((more - 1))
+    done
+    # Marks that sit on the character before them take no room; CJK and most emoji take two.
+    if [ $(((cp >= 0x300 && cp <= 0x36F) || (cp >= 0x200B && cp <= 0x200F) || (cp >= 0x20D0 && cp <= 0x20FF) || (cp >= 0xFE00 && cp <= 0xFE0F))) -eq 1 ]; then
+      continue
+    fi
+    if [ $(((cp >= 0x1100 && cp <= 0x115F) || (cp >= 0x2E80 && cp <= 0x303E) || (cp >= 0x3041 && cp <= 0x33FF) || (cp >= 0x3400 && cp <= 0x4DBF) || (cp >= 0x4E00 && cp <= 0x9FFF) || (cp >= 0xA000 && cp <= 0xA4CF) || (cp >= 0xAC00 && cp <= 0xD7A3) || (cp >= 0xF900 && cp <= 0xFAFF) || (cp >= 0xFE30 && cp <= 0xFE4F) || (cp >= 0xFF00 && cp <= 0xFF60) || (cp >= 0xFFE0 && cp <= 0xFFE6) || (cp >= 0x1F300 && cp <= 0x1F64F) || (cp >= 0x1F680 && cp <= 0x1F6FF) || (cp >= 0x1F900 && cp <= 0x1F9FF) || (cp >= 0x20000 && cp <= 0x3FFFD))) -eq 1 ]; then
+      w=$((w + 2))
+    else
+      w=$((w + 1))
+    fi
+  done
+  _CLI_R=$w
+}
+
+_cli_cut() {  # TEXT WIDTH → $_CLI_R   as much of TEXT as fits in WIDTH columns; escape codes are dropped
+  local s=$1 out='' c='' used=0 i=0 n=0
+  case $s in
+    *[!\ -~]*) ;;
+    *) _CLI_R=${s:0:$2}; return 0;;
+  esac
+  while :; do
+    case $s in
+      *"${_CLI_ESC}["*) out="$out${s%%"${_CLI_ESC}["*}"; s=${s#*"${_CLI_ESC}["}; s=${s#*[a-zA-Z]};;
+      *) break;;
+    esac
+  done
+  s="$out$s"; out=''; n=${#s}
+  while [ "$i" -lt "$n" ]; do
+    c=${s:$i:1}; i=$((i + 1))
+    _cli_len "$c"
+    if [ $((used + _CLI_R)) -gt "$2" ]; then break; fi
+    used=$((used + _CLI_R)); out="$out$c"
+  done
+  _CLI_R=$out
+}
+
+_cli_pad() {  # TEXT WIDTH   pad on the right, counting columns, not bytes
+  local gap=''
+  _cli_len "$1"
+  if [ "$_CLI_R" -lt "$2" ]; then printf -v gap '%*s' $(($2 - _CLI_R)) ''; fi
+  _CLI_R="$1$gap"
 }
 
 _cli_trim() {  # TEXT
@@ -305,14 +374,14 @@ cli_box() {  # cli_box [-t TITLE] LINE...   (or lines on stdin) plain text in a 
     if [ $# -gt 0 ]; then printf '%s\n' "$@"; fi
     return 0
   fi
-  for line in "$@"; do if [ "${#line}" -gt "$w" ]; then w=${#line}; fi; done
-  if [ -n "$title" ] && [ "$w" -lt $((${#title} + 2)) ]; then w=$((${#title} + 2)); fi
-  inner=$((w + 2))
+  for line in "$@"; do _cli_len "$line"; if [ "$_CLI_R" -gt "$w" ]; then w=$_CLI_R; fi; done
+  _cli_len "$title"; inner=$_CLI_R
+  if [ -n "$title" ] && [ "$w" -lt $((inner + 2)) ]; then w=$((inner + 2)); fi
   if [ -n "$title" ]; then
-    _cli_rep "$_CLI_G_H" $((inner - ${#title} - 3))
+    _cli_rep "$_CLI_G_H" $((w + 2 - inner - 3)); inner=$((w + 2))
     top="$_CLI_G_H $CLI_RESET$CLI_BOLD$title$CLI_RESET$CLI_GRAY $_CLI_R"
   else
-    _cli_rep "$_CLI_G_H" "$inner"; top=$_CLI_R
+    inner=$((w + 2)); _cli_rep "$_CLI_G_H" "$inner"; top=$_CLI_R
   fi
   printf '%s%s%s%s%s\n' "$CLI_GRAY" "$_CLI_G_TL" "$top" "$_CLI_G_TR" "$CLI_RESET"
   for line in "$@"; do
@@ -356,7 +425,7 @@ cli_kv() {  # cli_kv KEY VALUE [KEY VALUE]...   aligned "key: value" lines
     return 0
   fi
   for k in "$@"; do
-    if [ $((i % 2)) -eq 1 ] && [ "${#k}" -gt "$w" ]; then w=${#k}; fi
+    if [ $((i % 2)) -eq 1 ]; then _cli_len "$k"; if [ "$_CLI_R" -gt "$w" ]; then w=$_CLI_R; fi; fi
     i=$((i + 1))
   done
   while [ $# -ge 2 ]; do
@@ -368,8 +437,9 @@ cli_kv() {  # cli_kv KEY VALUE [KEY VALUE]...   aligned "key: value" lines
 
 _cli_fit() {  # TEXT WIDTH ALIGN(l|r|c)   cut to WIDTH if longer, then pad
   local text=$1 w=$2 gap=0 lead=''
-  if [ "${#text}" -gt "$w" ]; then text="${text:0:$((w - 1))}$_CLI_G_ELL"; fi
-  gap=$((w - ${#text}))
+  _cli_len "$text"
+  if [ "$_CLI_R" -gt "$w" ]; then _cli_cut "$text" $((w - 1)); text="$_CLI_R$_CLI_G_ELL"; _cli_len "$text"; fi
+  gap=$((w - _CLI_R))
   case $3 in
     r) _cli_rep ' ' "$gap"; _CLI_R="$_CLI_R$text";;
     c) _cli_rep ' ' $((gap / 2)); lead=$_CLI_R; _cli_rep ' ' $((gap - gap / 2)); _CLI_R="$lead$text$_CLI_R";;
@@ -387,28 +457,35 @@ _cli_table_rule() {  # LEFT MIDDLE RIGHT COLUMNS   one horizontal line of a bord
   printf '%s%s%s%s\n' "$CLI_GRAY" "$line" "$3" "$CLI_RESET"
 }
 
-cli_table() {  # cli_table [-s SEP] [-a ALIGN] [-b] [-H] HEADER ROW...   (or rows on stdin) cells split on SEP, default "|"
-  # -a lrc   align column 1 left, 2 right, 3 centred (default: numbers right, the rest left)
-  # -b       draw borders          -H   no header row: every row is data
-  local sep='|' align='' border=0 head=1 row='' rest='' cell='' line='' gap='  ' a='' num='' bar=''
-  local i=0 n=0 r=0 w=0 total=0 over=0 big=0 last=0 re='^[-+]?[0-9]+([.,][0-9]+)*%?$'
+cli_table() {  # cli_table [-s SEP] [-a ALIGN] [-k COLUMN]... [-b] [-H] HEADER ROW...   (or rows on stdin) cells split on SEP, default "|"
+  # -a lrc      align column 1 left, 2 right, 3 centred (default: numbers right, the rest left)
+  # -k COLUMN   never cut this column when the table is too wide: its header, or its number
+  # -b          draw borders          -H   no header row: every row is data
+  local sep='|' align='' border=0 head=1 row='' rest='' cell='' line='' gap='  ' a='' num='' bar='' keep='' k=''
+  local i=0 n=0 r=0 w=0 total=0 over=0 big=0 last=0 rows=0 re='^[-+]?[0-9]+([.,][0-9]+)*%?$'
   while :; do
     case ${1:-} in
       -s) sep=$2; shift 2;;
       -a) align=$2; shift 2;;
+      -k) keep="$keep$2$_CLI_NL"; shift 2;;
       -b) border=1; shift;;
       -H) head=0; shift;;
       *) break;;
     esac
   done
-  if [ $# -eq 0 ] && [ ! -t 0 ]; then
-    while IFS= read -r row || [ -n "$row" ]; do set -- "$@" "$row"; done
+  # The rows go into variables and the argument list is emptied: bash copies it on every
+  # function call, which makes a long table slow.
+  if [ $# -gt 0 ]; then
+    for row in "$@"; do rows=$((rows + 1)); eval "_cli_row$rows=\$row"; done
+    set --
+  elif [ ! -t 0 ]; then
+    while IFS= read -r row || [ -n "$row" ]; do rows=$((rows + 1)); eval "_cli_row$rows=\$row"; done
   fi
-  if [ $# -eq 0 ]; then return 0; fi
+  if [ "$rows" -eq 0 ]; then return 0; fi
 
   if [ "$_CLI_MODE" = agent ]; then  # tab-separated, nothing else
-    for row in "$@"; do
-      rest=$row; line=''
+    while [ "$r" -lt "$rows" ]; do
+      r=$((r + 1)); eval "rest=\$_cli_row$r"; unset "_cli_row$r"; line=''
       while :; do
         _cli_trim "${rest%%"$sep"*}"; line="$line$_CLI_R"
         case $rest in *"$sep"*) rest=${rest#*"$sep"}; line="$line$_CLI_TAB";; *) break;; esac
@@ -418,12 +495,13 @@ cli_table() {  # cli_table [-s SEP] [-a ALIGN] [-b] [-H] HEADER ROW...   (or row
     return 0
   fi
 
-  for row in "$@"; do  # pass 1: the width of each column, and whether it holds only numbers
-    r=$((r + 1)); rest=$row; i=0
+  while [ "$r" -lt "$rows" ]; do  # pass 1: the width of each column, and whether it holds only numbers
+    r=$((r + 1)); eval "rest=\$_cli_row$r"; i=0
     while :; do
       i=$((i + 1)); _cli_trim "${rest%%"$sep"*}"; cell=$_CLI_R
       eval "w=\${_cli_w$i:-0} num=\${_cli_num$i:-}"
-      if [ "${#cell}" -gt "$w" ]; then eval "_cli_w$i=${#cell}"; fi
+      _cli_len "$cell"
+      if [ "$_CLI_R" -gt "$w" ]; then eval "_cli_w$i=$_CLI_R"; fi
       if [ -n "$cell" ] && [ "$num" != 0 ] && { [ "$r" -gt 1 ] || [ "$head" -eq 0 ]; }; then
         if [[ $cell =~ $re ]]; then eval "_cli_num$i=1"; else eval "_cli_num$i=0"; fi
       fi
@@ -439,27 +517,44 @@ cli_table() {  # cli_table [-s SEP] [-a ALIGN] [-b] [-H] HEADER ROW...   (or row
     eval "_cli_w$i=$w _cli_a$i=$a"
     total=$((total + w)); i=$((i + 1))
   done
-  if [ "$_CLI_MODE" = rich ]; then  # too wide for the terminal: shorten the widest columns
+  while IFS= read -r k; do  # the columns that are never cut: by header first, then by number
+    if [ -z "$k" ]; then continue; fi
+    big=0
+    if [ "$head" -eq 1 ]; then
+      rest=$_cli_row1; i=0
+      while :; do
+        i=$((i + 1)); _cli_trim "${rest%%"$sep"*}"
+        if [ "$_CLI_R" = "$k" ]; then big=$i; break; fi
+        case $rest in *"$sep"*) rest=${rest#*"$sep"};; *) break;; esac
+      done
+    fi
+    if [ "$big" -eq 0 ]; then
+      case $k in *[!0-9]*) ;; *) if [ "$k" -ge 1 ] && [ "$k" -le "$n" ]; then big=$((10#$k)); fi;; esac
+    fi
+    if [ "$big" -gt 0 ]; then eval "_cli_keep$big=1"; fi
+  done <<EOF
+$keep
+EOF
+  if [ "$_CLI_MODE" = rich ]; then  # too wide for the terminal: shorten the widest column that may be cut
     _cli_width
     if [ "$border" -eq 1 ]; then over=$((total + 3 * n + 1 - _CLI_R)); else over=$((total + 2 * n - _CLI_R)); fi
     while [ "$over" -gt 0 ]; do
-      i=1; big=1
+      i=1; big=0; a=0
       while [ "$i" -le "$n" ]; do
-        eval "w=\$_cli_w$i a=\$_cli_w$big"
-        if [ "$w" -gt "$a" ]; then big=$i; fi
+        eval "w=\$_cli_w$i k=\${_cli_keep$i:-}"
+        if [ -z "$k" ] && [ "$w" -gt "$a" ]; then big=$i a=$w; fi
         i=$((i + 1))
       done
-      eval "w=\$_cli_w$big"
-      if [ "$w" -le 4 ]; then break; fi
-      eval "_cli_w$big=$((w - 1))"; over=$((over - 1))
+      if [ "$a" -le 4 ]; then break; fi  # nothing left to cut: the table runs past the edge
+      eval "_cli_w$big=$((a - 1))"; over=$((over - 1))
     done
   fi
 
   bar="$CLI_GRAY$_CLI_G_V$CLI_RESET"
   if [ "$border" -eq 1 ]; then _cli_table_rule "$_CLI_G_TL$_CLI_G_H" "$_CLI_G_H$_CLI_G_TT$_CLI_G_H" "$_CLI_G_H$_CLI_G_TR" "$n"; fi
   r=0
-  for row in "$@"; do  # pass 2: print
-    r=$((r + 1)); rest=$row; i=0; line=''; last=0
+  while [ "$r" -lt "$rows" ]; do  # pass 2: print
+    r=$((r + 1)); eval "rest=\$_cli_row$r"; unset "_cli_row$r"; i=0; line=''; last=0
     while :; do
       i=$((i + 1)); cell=''
       if [ "$last" -eq 0 ]; then
@@ -480,7 +575,7 @@ cli_table() {  # cli_table [-s SEP] [-a ALIGN] [-b] [-H] HEADER ROW...   (or row
     done
     if [ "$border" -eq 1 ]; then
       printf '%s\n' "$line"
-      if [ "$r" -eq 1 ] && [ "$head" -eq 1 ] && [ $# -gt 1 ]; then
+      if [ "$r" -eq 1 ] && [ "$head" -eq 1 ] && [ "$rows" -gt 1 ]; then
         _cli_table_rule "$_CLI_G_TLEFT$_CLI_G_H" "$_CLI_G_H$_CLI_G_TX$_CLI_G_H" "$_CLI_G_H$_CLI_G_TRIGHT" "$n"
       fi
     elif [ "$r" -gt 1 ] || [ "$head" -eq 0 ]; then
@@ -495,7 +590,7 @@ cli_table() {  # cli_table [-s SEP] [-a ALIGN] [-b] [-H] HEADER ROW...   (or row
     fi
   done
   if [ "$border" -eq 1 ]; then _cli_table_rule "$_CLI_G_BL$_CLI_G_H" "$_CLI_G_H$_CLI_G_TB$_CLI_G_H" "$_CLI_G_H$_CLI_G_BR" "$n"; fi
-  i=1; while [ "$i" -le "$n" ]; do unset "_cli_w$i" "_cli_num$i" "_cli_a$i"; i=$((i + 1)); done
+  i=1; while [ "$i" -le "$n" ]; do unset "_cli_w$i" "_cli_num$i" "_cli_a$i" "_cli_keep$i"; i=$((i + 1)); done
 }
 
 # ── timelines (stdout) ───────────────────────────────────────────────────────

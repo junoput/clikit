@@ -45,7 +45,7 @@ def run(case):
     env = {name: os.environ[name] for name in ("PATH", "HOME", "TMPDIR") if name in os.environ}
     env.update({"CLI_MODE": case["mode"], "COLUMNS": "80", "LANG": "en_US.UTF-8", "TERM": "xterm"})
     env.update(case["env"])
-    script = '. "%s"\n' % LIB + "".join("cli_%s\n" % call for call in case["calls"])
+    script = '. "%s"\n' % LIB + "".join("cli_%s\n" % call.replace("\\e", "\x1b") for call in case["calls"])
     stdin = "".join(decode(line) + "\n" for line in case["stdin"]).encode()
     done = subprocess.run(["/bin/bash", "-c", script], input=stdin, env=env, capture_output=True, cwd=HERE)
     out, err = done.stdout.decode(), done.stderr.decode()
