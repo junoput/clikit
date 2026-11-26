@@ -47,10 +47,14 @@ i=0; while [ $i -lt 12 ]; do i=$((i + 1)); sleep 0.12; cli_task Photos $((i * 10
 i=0; while [ $i -lt 6 ]; do i=$((i + 1)); sleep 0.12; cli_task Messages $((i * 50)) 300; done
 i=0; while [ $i -lt 3 ]; do i=$((i + 1)); cli_task Verify; sleep 0.12; done; cli_task_done Verify
 cli_tasks_done'''),
-    "stack": dict(cols=62, show=['cli_tasks "Sync" iPhone iPad Watch'], code='''
-cli_tasks "Sync" iPhone iPad Watch
-cli_task iPhone 3 4; cli_task iPad 10 200; cli_task Watch 5 30
-sleep 1.3; cli_task_fail Watch "not reachable"; cli_task iPad 64 200'''),
+    "stack": dict(cols=78, show=['cli_tasks "Sync" "iPhone | 1 | bytes rate eta" "Watch | 1 | percent" ...',
+                                 'cli_task_note Watch "verifying"'], code='''
+cli_tasks -t 96 "Sync" Passcode "iPhone | 1 | bytes rate eta" "iPad | 1 | bytes rate eta" "Watch | 1 | percent" Mac
+cli_task_skip Passcode
+cli_task -t 95 iPhone 3221225472 4294967296
+cli_task -t 40 iPad 322122547 6442450944
+cli_task Watch 40 100; cli_task_note Watch "verifying"
+cli_task_fail Mac "not reachable"'''),
     "messages": dict(cols=62, show=['cli_steps 3', 'cli_step "Build"', 'cli_spin "Compiling" make', 'cli_ok "42 files compiled"',
                                     'cli_warn "2 tests skipped"', 'cli_error "Connection refused"', 'cli_progress 14 40 "Uploading"'], code='''
 cli_steps 3
@@ -62,10 +66,13 @@ cli_warn "2 tests skipped"
 cli_step "Deploy"
 cli_error "Connection refused"
 cli_progress 1 40 "Uploading"; sleep 0.9; cli_progress 14 40 "Uploading"'''),
-    "layout": dict(cols=62, show=['cli_table "Device | Snapshots | Size" "iPhone 15 | 12 | 44.9 GB" ...',
+    "layout": dict(cols=62, show=['cli_table -k Id "Device | State | Size | Id" ROW...',
                                   'cli_kv "Last backup" "2026-11-20 09:14" "Location" "/Volumes/Backup"',
                                   'cli_box -t "Next steps" "Verify the backup" "Unplug the device"'], code='''
-cli_table "Device | Snapshots | Size" "iPhone 15 | 12 | 44.9 GB" "iPad | 7 | 12.8 GB" "Watch | 3 | 1.2 GB"
+cli_table -k Id "Device | State | Size | Id" \\
+  "📱 Kitchen iPad | $(cli_style green online) | 12.8 GB | 00008030-000123456789ABCD" \\
+  "A phone with a rather long name | $(cli_style red failed) | 44.9 GB | 00008150-001A2B3C4D5E6F78" \\
+  "日本語の名前 | $(cli_style dim never) | 1.2 GB | 00008101-000A1B2C3D4E5F60"
 cli_nl
 cli_kv "Last backup" "2026-11-20 09:14" "Location" "/Volumes/Backup"
 cli_nl
@@ -84,6 +91,15 @@ cli_multiselect "Notify" email slack pager sms'''),
 }
 
 
+WIDE = ((0x1100, 0x115F), (0x2E80, 0x303E), (0x3041, 0x33FF), (0x3400, 0x4DBF), (0x4E00, 0x9FFF), (0xA000, 0xA4CF),
+        (0xAC00, 0xD7A3), (0xF900, 0xFAFF), (0xFE30, 0xFE4F), (0xFF00, 0xFF60), (0xFFE0, 0xFFE6), (0x1F300, 0x1F64F),
+        (0x1F680, 0x1F6FF), (0x1F900, 0x1F9FF), (0x20000, 0x3FFFD))
+
+
+def wide(ch):
+    return any(low <= ord(ch) <= high for low, high in WIDE)
+
+
 class Screen:
     """As much of a terminal as the library uses."""
 
@@ -93,10 +109,10 @@ class Screen:
 
     def put(self, ch):
         row = self.rows[self.r]
-        while len(row) <= self.c:
+        while len(row) <= self.c + 1:
             row.append((" ", None, False, False))
         row[self.c] = (ch, self.fg, self.bold, self.dim)
-        self.c += 1
+        self.c += 2 if wide(ch) else 1  # CJK and emoji take two cells, as on a terminal
 
     def feed(self, text):
         i = 0

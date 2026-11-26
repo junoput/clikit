@@ -28,13 +28,15 @@ Status lines, numbered steps, a spinner's result, a progress bar:
 
 ![Steps, ticks, a warning, an error and a progress bar](docs/img/messages.svg)
 
-Tasks that run at the same time, under one total:
+Tasks that run at the same time, under one total. A task can show sizes, its speed and the time
+left, or only a percentage and a note; it can fail, or be skipped:
 
-![Three bars side by side, one of them failed, over the bar of the total](docs/img/stack.svg)
+![Five tasks: one skipped, two with sizes, speed and time left, one with a note, one failed, over the bar of the total](docs/img/stack.svg)
 
-Tables, key-value lines, boxes:
+Tables, key-value lines, boxes. Cells may be coloured, emoji and CJK text keep the columns
+straight, and a column that must stay whole (an identifier) is never cut:
 
-![A table with right-aligned numbers, two key-value lines and a box](docs/img/layout.svg)
+![A table whose name column is cut while the id column stays whole, two key-value lines and a box](docs/img/layout.svg)
 
 Timelines: events on tracks along a time axis, or one row per event:
 
