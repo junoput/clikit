@@ -521,14 +521,17 @@ fn editor() {
     use cli::{Candidate, Completion, Editor, Read};
     use std::io::IsTerminal;
     cli::header("A prompt of your own");
-    if cli::status_mode() != cli::Mode::Rich || !std::io::stdin().is_terminal() {
+    // At a terminal, or with keys on standard input (CLI_INTERACTIVE=1), as the tests and the
+    // script that draws the pictures do it.
+    let keys = std::io::stdin().is_terminal() || std::env::var("CLI_INTERACTIVE").is_ok_and(|on| on == "1");
+    if cli::status_mode() != cli::Mode::Rich || !keys {
         cli::hint("The line editor is for a person at a terminal: run this section there.");
         return;
     }
-    cli::hint(
-        "Type open and a space, then Tab: a name with spaces goes in quoted, a folder leaves the cursor behind it.",
-    );
-    cli::hint("Up and Ctrl-R go through earlier lines, Alt-B and Alt-F move by words, Ctrl-C drops the line.");
+    cli::hint("Type open and a space, then Tab. A name with spaces goes in quoted,");
+    cli::hint("and a folder leaves the cursor right behind it.");
+    cli::hint("Up and Ctrl-R recall earlier lines, Alt-B and Alt-F move by words,");
+    cli::hint("Ctrl-C drops the line.");
     const FILES: [(&str, &str); 5] = [
         ("Annual report.pdf", "12 pages"),
         ("Notes/", "a folder"),

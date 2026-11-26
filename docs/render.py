@@ -35,8 +35,9 @@ BACKUPS = '''"2024-02-01 | iPhone 12 | 38.7 GB" "2024-07-11 | iPad | 11.9 GB" "2
 FILES = '''"Photos/2024/rome.jpg | 2.1 MB" "Photos/2024/wedding.jpg | 3.4 MB" "Photos/2025/hiking.jpg | 1.8 MB" \\
   "Notes/todo.txt | 4 KB" "Notes/ideas.md | 12 KB" "Contacts.vcf | 310 KB"'''
 
-# name: the columns of the terminal, the lines shown as typed, the code that runs, and options:
-# keys (typed into the prompts), cut (drop the output from the last match on), frames (animate).
+# name: the columns of the terminal, the lines shown as typed, the code that runs (or a command
+# of its own), and options: keys (typed into the prompts), cut (drop the output from the last
+# match on; back=2: from the one before it), frames (animate).
 SHOTS = {
     "tasks": dict(cols=62, frames=True, show=[
         'cli_tasks "Backup" "Scan | 1" "Photos | 6" "Messages | 2" "Verify | 1"',
@@ -55,28 +56,34 @@ cli_task -t 95 iPhone 3221225472 4294967296
 cli_task -t 40 iPad 322122547 6442450944
 cli_task Watch 40 100; cli_task_note Watch "verifying"
 cli_task_fail Mac "not reachable"'''),
-    "messages": dict(cols=62, show=['cli_steps 3', 'cli_step "Build"', 'cli_spin "Compiling" make', 'cli_ok "42 files compiled"',
-                                    'cli_warn "2 tests skipped"', 'cli_error "Connection refused"', 'cli_progress 14 40 "Uploading"'], code='''
-cli_steps 3
+    "messages": dict(cols=62, code="""
+cli_steps 2
 cli_step "Build"
-cli_spin "Compiling" sleep 1.2
+cli_info "Using the cache"
 cli_ok "42 files compiled"
-cli_step "Test"
-cli_warn "2 tests skipped"
 cli_step "Deploy"
+cli_warn "2 tests skipped"
 cli_error "Connection refused"
-cli_progress 1 40 "Uploading"; sleep 0.9; cli_progress 14 40 "Uploading"'''),
-    "layout": dict(cols=62, show=['cli_table -k Id "Device | State | Size | Id" ROW...',
-                                  'cli_kv "Last backup" "2026-11-20 09:14" "Location" "/Volumes/Backup"',
-                                  'cli_box -t "Next steps" "Verify the backup" "Unplug the device"'], code='''
-cli_table -k Id "Device | State | Size | Id" \\
-  "📱 Kitchen iPad | $(cli_style green online) | 12.8 GB | 00008030-000123456789ABCD" \\
-  "A phone with a rather long name | $(cli_style red failed) | 44.9 GB | 00008150-001A2B3C4D5E6F78" \\
-  "日本語の名前 | $(cli_style dim never) | 1.2 GB | 00008101-000A1B2C3D4E5F60"
+cli_hint "Try again with --verbose\""""),
+    "progress": dict(cols=62, show=['cli_progress "$i" 40 "Downloading"     # in your loop', 'cli_spin "Compiling" make',
+                                    'cli_spin "Linking" make link', 'cli_progress "$i" 40 "Uploading"'], code="""
+cli_progress 40 40 "Downloading"
+cli_spin "Compiling" sleep 1.1
+cli_spin "Linking" sh -c "echo undefined symbol: main; exit 1" || true
+cli_progress 3 40 "Uploading"; sleep 0.9; cli_progress 14 40 "Uploading\""""),
+    "table": dict(cols=62, show=['cli_table "Item | Qty | Price" "Apple | 3 | 1.20" ...',
+                                 'cli_table -k Id "Device | State | Id" ROW...'], code="""
+cli_table "Item | Qty | Price" "Apple | 3 | 1.20" "Melon | 12 | 10.00" "Fig | 100 | 0.50"
 cli_nl
-cli_kv "Last backup" "2026-11-20 09:14" "Location" "/Volumes/Backup"
-cli_nl
-cli_box -t "Next steps" "Verify the backup" "Unplug the device"'''),
+cli_table -k Id "Device | State | Id" \\
+  "📱 Kitchen tablet | $(cli_style green online) | 00008030-000123456789ABCD" \\
+  "A phone with a rather long name | $(cli_style red failed) | 00008150-001A2B3C4D5E6F78" \\
+  "日本語の名前 | $(cli_style dim never) | 00008101-000A1B2C3D4E5F60\""""),
+    "layout": dict(cols=62, code="""
+cli_header "Backup"
+cli_list "Photos" "Messages" "Settings"
+cli_kv "Last run" "2026-11-20 09:14" "Kept in" "/Volumes/Backup"
+cli_box -t "Next steps" "Verify the backup" "Unplug the device\""""),
     "timeline": dict(cols=72, show=["cli_timeline ROW...        # WHEN | TRACK | LABEL | FROM", "cli_timeline -v ROW..."],
                      code="cli_timeline %s\ncli_nl\ncli_timeline -v %s" % (BACKUPS, BACKUPS)),
     "tree": dict(cols=50, show=["cli_tree ROW...            # PATH | NOTE"], code="cli_tree %s" % FILES),
@@ -87,6 +94,12 @@ cli_box -t "Next steps" "Verify the backup" "Unplug the device"'''),
 cli_select "Deploy to" staging production >/dev/null
 cli_confirm "Run the migrations?" y
 cli_multiselect "Notify" email slack pager sms'''),
+    # When the keys run out, the line is taken and a new prompt drawn: go back two drawings.
+    "interactive": dict(cols=72, keys="add Buy milk\nli\t\n\t", cut=r"\r\x1b\[J", back=2, show=["todo -i"],
+                        code='TODO_FILE=$(mktemp) "%s" -i' % os.path.join(ROOT, "sh", "examples", "todo.sh")),
+    # The line editor is in the Rust crate: this one runs its demo (cargo build --features clap --example demo).
+    "editor": dict(cols=78, keys="open \t", cut=r"\r\x1b\[J", back=2, show=["demo editor"],
+                   command=[os.path.join(ROOT, "rust", "target", "debug", "examples", "demo"), "editor"]),
     "help": dict(cols=72, show=["todo --help"], code='TODO_FILE=/dev/null "%s" --help' % os.path.join(ROOT, "sh", "examples", "todo.sh")),
 }
 
@@ -263,13 +276,17 @@ def render(name, shot):
     env.update(CLI_MODE="rich", COLUMNS=str(shot["cols"]), LANG="en_US.UTF-8", TERM="xterm", CLI_AGENT="0")
     if "keys" in shot:
         env["CLI_INTERACTIVE"] = "1"
-    done = subprocess.run(["bash", "-c", '. "%s"\n%s' % (CLI, shot["code"])], env=env, cwd=shot.get("cwd", ROOT),
+    command = shot.get("command") or ["bash", "-c", '. "%s"\n%s' % (CLI, shot["code"])]
+    if not os.path.exists(command[0]) and os.sep in command[0]:
+        print("%-10s skipped: %s is not built" % (name, os.path.relpath(command[0], ROOT)))
+        return
+    done = subprocess.run(command, env=env, cwd=shot.get("cwd", ROOT),
                           input=shot.get("keys", "").encode(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     raw = done.stdout.decode()
     if "cut" in shot:
-        raw = raw[:[match.start() for match in re.finditer(shot["cut"], raw)][-1]]
+        raw = raw[:[match.start() for match in re.finditer(shot["cut"], raw)][-shot.get("back", 1)]]
     screen = Screen()
-    shown = shot.get("show", [line for line in shot["code"].strip().split("\n")])
+    shown = shot.get("show") or shot["code"].strip().split("\n")
     screen.feed("".join("\x1b[90m$\x1b[0m %s\n" % line for line in shown) + "\n")
     frames = []
     for piece in re.split(r"(?<=\x1b\[J)", raw) if shot.get("frames") else [raw]:

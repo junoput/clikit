@@ -20,57 +20,99 @@ rich                                      plain                 agent
   production
 ```
 
-## What is in it
+## Features
 
-| | |
-|---|---|
-| Status lines | info, ok, warning, error, numbered steps, hints; they go above a live bar, not through it |
-| Progress | a bar, a spinner, and several tasks under one total: stages or side by side, with sizes, speed, time left, notes, skipped and failed tasks |
-| Layout | headers, rules, boxes, lists, key-value lines, tables (numbers right-aligned, coloured cells, emoji and CJK measured, a column that is never cut) |
-| Over time and in depth | timelines (along an axis, or one row per event) and trees (of paths, or of the files on disk) |
-| Questions | menus, several choices, yes or no, text with suggestions, a hidden password, a file browser; Escape goes back one question |
-| Whole programs | commands, options and help pages; an interactive prompt with Tab completion and history, where Ctrl-C drops the line |
-| A prompt of your own (Rust) | a line editor: completion from your program with a list of what each candidate is, names with spaces quoted for you, history kept in a file, Ctrl-R, long lines |
-| Small things | durations, sizes, stopwatches, the terminal's width, whether colours are on |
+Every picture is drawn by [`docs/render.py`](docs/render.py) from what the code prints at a
+terminal, so it shows the real thing. The Rust crate prints the same bytes as the shell
+functions named in the pictures.
 
-The two READMEs under [Implementations](#implementations) list every function.
+### Status lines and steps
 
-## What it looks like
+![Two numbered steps with an info line, a green tick, a warning, an error and a hint](docs/img/messages.svg)
 
-At a terminal. Every picture is drawn by [`docs/render.py`](docs/render.py) from what the code
-prints, so it shows the real thing; the Rust crate prints the same bytes.
+Info, ok, warning, error, numbered steps, hints. They go to standard error, so they never mix
+with a program's output, and they appear above a live bar, not through it.
 
-Status lines, numbered steps, a spinner's result, a progress bar:
+### Progress bar and spinner
 
-![Steps, ticks, a warning, an error and a progress bar](docs/img/messages.svg)
+![A finished bar and a finished spinner as one line each, a failed command with its output, and a live bar](docs/img/progress.svg)
 
-Tasks that run at the same time, under one total. A task can show sizes, its speed and the time
-left, or only a percentage and a note; it can fail, or be skipped:
+A bar for work that can be counted, a spinner around a command. Finished work becomes one
+line with the time it took; a command's output shows only when it fails.
+
+### Several tasks under one total
 
 ![Five tasks: one skipped, two with sizes, speed and time left, one with a note, one failed, over the bar of the total](docs/img/stack.svg)
 
-Tables, key-value lines, boxes. Cells may be coloured, emoji and CJK text keep the columns
-straight, and a column that must stay whole (an identifier) is never cut:
+The stages of a job one after the other (the animation at the top of this page), or tasks side
+by side. Each task can show sizes, its speed and the time left, or only a percentage and a
+note; it can fail or be skipped; weights say how much of the total each one is.
 
-![A table whose name column is cut while the id column stays whole, two key-value lines and a box](docs/img/layout.svg)
+### Tables
 
-Timelines: events on tracks along a time axis, or one row per event:
+![A table with right-aligned numbers, and one whose long names are cut while the id column stays whole](docs/img/table.svg)
 
-![Three devices' backups over three years, across and as a list](docs/img/timeline.svg)
+Columns align themselves, numbers to the right. Cells may be coloured, emoji and CJK text keep
+the columns straight, and when the terminal is too narrow a column you name is never cut.
 
-Trees of paths or files, and a browser to walk through them:
+### Headers, lists, key-values, boxes
+
+![A header, a bulleted list, two aligned key-value lines and a box with a title](docs/img/layout.svg)
+
+The small pieces most output is made of.
+
+### Timelines
+
+![Three devices' backups over three years, along a time axis and as one row per event](docs/img/timeline.svg)
+
+Events on tracks: along an axis that fits the terminal, or one row per event, as long as it
+needs to be. A track is anything: a device, a branch, a photo album.
+
+### Trees
 
 ![A tree of files with their sizes](docs/img/tree.svg)
 
+From a list of paths, or from the files on disk.
+
+### File browser
+
 ![The file browser with a directory open and the cursor inside it](docs/img/browse.svg)
 
-Questions: menus, yes or no, several choices:
+Walk through a tree with the arrow keys and pick a file or a directory: the files on disk, or
+any list of paths, such as the contents of an archive.
+
+### Questions
 
 ![An answered menu, a confirmation and a list with two options ticked](docs/img/prompts.svg)
 
-Help pages, written from the commands and options a program declares:
+Menus, several choices, yes or no, text with suggestions, a hidden password. Escape goes back
+one question. They work while the program's output is piped, and without a terminal they read
+a line of standard input.
+
+### Commands and help pages
 
 ![The help page of a small todo program](docs/img/help.svg)
+
+Declare commands and options; parsing, help pages and error messages follow. In Rust the same
+comes on top of clap.
+
+### Interactive prompt
+
+![A prompt that ran two commands and now shows the commands Tab can complete](docs/img/interactive.svg)
+
+Any program with commands gets a prompt that runs them: Tab completion, history, Ctrl-C to
+drop a line.
+
+### A line editor for a prompt of your own
+
+![A prompt completing a file name: the candidates as a list, each with a few words about it](docs/img/editor.svg)
+
+For a program that is a shell itself (Rust): completion from your program with a list of what
+each candidate is, names with spaces quoted for you, history kept in a file, Ctrl-R, long lines.
+
+### And the small things
+
+Durations (`3m 07s`), sizes (`27.9 GB`), stopwatches, the terminal's width, whether colours are on.
 
 ## Implementations
 
