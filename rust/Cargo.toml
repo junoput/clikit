@@ -1,0 +1,26 @@
+[package]
+name = "clikit"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "Good-looking command-line output that adapts to its reader: a person, a log file, or an LLM agent."
+license = "MIT"
+readme = "README.md"
+
+[features]
+default = []
+# Agent-mode help pages, mode flags and an interactive prompt for clap applications.
+clap = ["dep:clap"]
+
+[dependencies]
+clap = { version = "4", optional = true, default-features = false, features = ["std", "help", "usage", "error-context"] }
+
+[dev-dependencies]
+clap = { version = "4", features = ["derive"] }
+
+[[example]]
+name = "demo"
+required-features = ["clap"]
+
+[lints.rust]
+unsafe_code = "forbid"
