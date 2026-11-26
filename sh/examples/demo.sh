@@ -86,6 +86,13 @@ demo_lists() {
   try 'cli_table -H "config | ~/.config/app.toml" "cache | ~/.cache/app" "log | /var/log/app.log"'
   cli_hint "At a terminal, a table that is too wide has its widest column cut:"
   try 'cli_table "File | What it is" "README.md | A long description that will not fit on one line of most terminals, so the end of it is replaced by an ellipsis when a person is looking"'
+  cli_hint "-k keeps a column whole, an identifier for one: the others are cut instead. Cells may be"
+  cli_hint "coloured, and emoji and CJK text take the two columns a terminal gives them:"
+  try 'cli_table -k Id "Device | State | Id" \
+          "📱 Kitchen tablet | $(cli_style green online) | 00008030-000123456789ABCD" \
+          "A phone with a rather long name, longer than fits here | $(cli_style red failed) | 00008150-001A2B3C4D5E6F78" \
+          "日本語の名前 | $(cli_style dim never) | 00008101-000A1B2C3D4E5F60"'
+  cli_hint "Each stream is judged on its own: in \"demo.sh lists | cat\" the tables are plain and these hints keep their look."
 }
 
 demo_time() {
@@ -130,6 +137,20 @@ while [ $i -lt 40 ]; do
   if [ $i -lt 12 ]; then cli_task Watch $i 30; elif [ $i -eq 12 ]; then cli_task_fail Watch "not reachable"; fi
 done
 cli_tasks_done || echo "exit status $?"'
+  cli_hint "A task can show sizes, its speed and the time left, or only a percentage. A note says what it is"
+  cli_hint "doing, a task can be skipped, and -t gives times that are known, for work that began earlier:"
+  try 'cli_tasks -t 95 "Restore" Unlock "Photos | 6 | bytes rate eta" "Settings | 1 | percent"
+cli_task_skip Unlock
+i=0
+while [ $i -lt 20 ]; do
+  i=$((i + 1)); work 0.08
+  cli_task -t 95 Photos $((1073741824 + i * 53687091)) 2147483648
+  cli_task Settings $((i * 5)) 100
+  case $i in 5) cli_task_note Settings "wallpaper";; 12) cli_task_note Settings "accounts";; esac
+  if [ $i -eq 10 ]; then cli_warn "A message goes above the bars, not through them"; fi
+done
+cli_task_done Photos; cli_task_note Photos "1,204 files"
+cli_tasks_done'
   try 'cli_spin "Compiling" work 1.5'
   try 'cli_spin "A step that fails" sh -c "echo line 12: something is wrong; exit 3" || echo "exit status $?"'
 }
@@ -173,7 +194,8 @@ demo_interactive() {
   cli_header "Interactive mode"
   try 'printf "add \"From a pipe\"\nlist\n" | todo -i'
   if [ -z "$IN_ALL" ] && [ "$(cli_mode)" = rich ] && [ -t 0 ]; then
-    cli_hint "Now live. Tab and Shift-Tab step through commands and options, up-arrow recalls a line."
+    cli_hint "Now live. Tab and Shift-Tab step through commands and options, up-arrow recalls a line,"
+    cli_hint "Ctrl-C drops the line, and on an empty line leaves the prompt."
     try 'todo -i'
   else
     cli_info "Run 'examples/demo.sh interactive' in a terminal for the live prompt."

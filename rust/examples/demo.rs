@@ -36,6 +36,8 @@ enum Section {
     Timeline,
     /// Trees of paths or files, and walking through one
     Tree,
+    /// A line editor for a prompt of your own
+    Editor,
     /// Stopwatches, countdown, durations
     Time,
     /// Progress bars, tasks under one total, spinner
@@ -57,12 +59,13 @@ enum Section {
     Interactive,
 }
 
-const SECTIONS: [(&str, &str); 9] = [
+const SECTIONS: [(&str, &str); 10] = [
     ("messages", "Status lines, steps, styled text"),
     ("layout", "Headers, boxes, rules"),
     ("lists", "Lists, key/values, tables"),
     ("timeline", "Events on tracks: along a time axis, or one per row"),
     ("tree", "Trees of paths or files, and walking through one"),
+    ("editor", "A line editor for a prompt of your own"),
     ("time", "Stopwatches, countdown, durations"),
     ("progress", "Progress bars, tasks under one total, spinner"),
     ("prompts", "Input, selectors, confirm, password"),
@@ -136,6 +139,19 @@ fn lists() {
     let long = "A long description that will not fit on one line of most terminals, so the end of it is replaced by \
                 an ellipsis when a person is looking";
     cli::table(&[["File", "What it is"], ["README.md", long]]);
+    cli::hint("A column can be kept whole, an identifier for one: the others are cut instead. Cells may be");
+    cli::hint("coloured, and emoji and CJK text take the two columns a terminal gives them:");
+    cli::Table::new().keep("Id").print(&[
+        ["Device".to_string(), "State".to_string(), "Id".to_string()],
+        ["📱 Kitchen tablet".to_string(), cli::style("green", "online"), "00008030-000123456789ABCD".to_string()],
+        [
+            "A phone with a rather long name, longer than fits here".to_string(),
+            cli::style("red", "failed"),
+            "00008150-001A2B3C4D5E6F78".to_string(),
+        ],
+        ["日本語の名前".to_string(), cli::style("dim", "never"), "00008101-000A1B2C3D4E5F60".to_string()],
+    ]);
+    cli::hint("Each stream is judged on its own: in \"demo lists | cat\" the tables are plain and these hints keep their look.");
 }
 
 fn time() {
@@ -208,6 +224,29 @@ fn progress() {
     if !sync.finish() {
         cli::hint("finish() returned false: a task failed.");
     }
+    cli::hint("A task can show sizes, its speed and the time left, or only a percentage. A note says what it is");
+    cli::hint("doing, a task can be skipped, and times that are known can be given, for work that began earlier:");
+    let restore = cli::Tasks::new("Restore");
+    restore.started(Duration::from_secs(95));
+    let unlock = restore.add("Unlock", 1);
+    let photos = restore.add("Photos", 6).bytes().rate().eta();
+    let settings = restore.add("Settings", 1).percent();
+    unlock.skip();
+    photos.started(Duration::from_secs(95));
+    for i in 1..=20u64 {
+        work(80);
+        photos.set(1_073_741_824 + i * 53_687_091, 2_147_483_648);
+        settings.set(i * 5, 100);
+        match i {
+            5 => settings.note("wallpaper"),
+            12 => settings.note("accounts"),
+            10 => cli::warn("A message goes above the bars, not through them"),
+            _ => {}
+        }
+    }
+    photos.done();
+    photos.note("1,204 files");
+    restore.finish();
     let _: Result<(), String> = cli::spin("Compiling", || {
         work(1500);
         Ok(())
@@ -478,6 +517,56 @@ fn tree() {
     cli::kv(&[("file", file.unwrap_or_else(|_| nothing())), ("folder", folder.unwrap_or_else(|_| nothing()))]);
 }
 
+fn editor() {
+    use cli::{Candidate, Completion, Editor, Read};
+    use std::io::IsTerminal;
+    cli::header("A prompt of your own");
+    if cli::status_mode() != cli::Mode::Rich || !std::io::stdin().is_terminal() {
+        cli::hint("The line editor is for a person at a terminal: run this section there.");
+        return;
+    }
+    cli::hint(
+        "Type open and a space, then Tab: a name with spaces goes in quoted, a folder leaves the cursor behind it.",
+    );
+    cli::hint("Up and Ctrl-R go through earlier lines, Alt-B and Alt-F move by words, Ctrl-C drops the line.");
+    const FILES: [(&str, &str); 5] = [
+        ("Annual report.pdf", "12 pages"),
+        ("Notes/", "a folder"),
+        ("Notes/Ideas for next year.md", "a draft"),
+        ("Notes/todo.txt", "plain text"),
+        ("budget.csv", "a table"),
+    ];
+    let mut editor = Editor::new().completer(|before: &str| -> Completion {
+        let Some((_, typed)) = before.split_once(' ') else {
+            let commands = [("open", "Show a file"), ("close", "Put it away"), ("exit", "Leave this prompt")];
+            return commands.into_iter().map(Candidate::from).collect::<Vec<_>>().into();
+        };
+        // What is one level below what was typed; a folder is only part of the word.
+        let typed = typed.trim_start_matches('"');
+        FILES
+            .iter()
+            .filter(|(path, _)| path.starts_with(typed) && *path != typed)
+            .filter(|(path, _)| !path[typed.len()..].trim_end_matches('/').contains('/'))
+            .map(|(path, about)| match path.ends_with('/') {
+                true => Candidate::new(*path, *about).partial(),
+                false => Candidate::new(*path, *about),
+            })
+            .collect::<Vec<_>>()
+            .into()
+    });
+    let prompt = format!("{} ", cli::style("cyan", "files>"));
+    loop {
+        match editor.read(&prompt) {
+            Read::Line(line) if line.trim() == "exit" => break,
+            Read::Line(line) => match cli::split_words(&line) {
+                Ok(words) => cli::kv(&[("words", format!("{words:?}"))]),
+                Err(problem) => cli::error(problem),
+            },
+            Read::Interrupted | Read::End => break,
+        }
+    }
+}
+
 fn run(section: Section) -> i32 {
     match section {
         Section::Messages => messages(),
@@ -485,6 +574,7 @@ fn run(section: Section) -> i32 {
         Section::Lists => lists(),
         Section::Timeline => timeline(),
         Section::Tree => tree(),
+        Section::Editor => editor(),
         Section::Time => time(),
         Section::Progress => progress(),
         Section::Prompts => prompts(),
@@ -496,6 +586,7 @@ fn run(section: Section) -> i32 {
                 Section::Lists,
                 Section::Timeline,
                 Section::Tree,
+                Section::Editor,
                 Section::Time,
                 Section::Progress,
                 Section::Prompts,
