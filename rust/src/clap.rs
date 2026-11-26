@@ -30,7 +30,7 @@ use ::clap::error::{ContextKind, ErrorKind};
 use ::clap::{Arg, Command, Parser};
 
 use crate::ctx::{self, Mode, CYAN, RESET};
-use crate::edit::{Candidate, Editor, Read};
+use crate::edit::{Candidate, Completion, Editor, Read};
 use crate::msg::{msg, Level};
 
 /// Parse the process's arguments, or print help or an error and exit.
@@ -302,7 +302,7 @@ fn complete(command: &Command, before: &str) -> Vec<String> {
     found
 }
 
-type More<'a> = Box<dyn Fn(&str) -> Vec<Candidate> + 'a>;
+type More<'a> = Box<dyn Fn(&str) -> Completion + 'a>;
 
 /// What [`Shell::before`] decides about a line.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -356,7 +356,7 @@ impl<'a, T: Parser> Shell<'a, T> {
         Shell {
             prompt: None,
             before: Box::new(|line| Line::Run(line.to_string())),
-            complete: Box::new(|_| Vec::new()),
+            complete: Box::new(|_| Completion::default()),
             history: None,
             parser: std::marker::PhantomData,
         }
@@ -379,8 +379,10 @@ impl<'a, T: Parser> Shell<'a, T> {
 
     /// More for Tab to offer, next to the program's commands and options: the function gets
     /// the text before the cursor, as for [`clikit::Editor::completer`](crate::Editor::completer).
-    pub fn complete(mut self, complete: impl Fn(&str) -> Vec<Candidate> + 'a) -> Shell<'a, T> {
-        self.complete = Box::new(complete);
+    /// A [`Completion`] that says itself which part of the line it replaces stands alone: the
+    /// program's commands and options are then not offered with it.
+    pub fn complete<C: Into<Completion>>(mut self, complete: impl Fn(&str) -> C + 'a) -> Shell<'a, T> {
+        self.complete = Box::new(move |before| complete(before).into());
         self
     }
 
@@ -401,8 +403,12 @@ impl<'a, T: Parser> Shell<'a, T> {
         let fixed = format!("{}{app}{}> ", t.c(CYAN), t.c(RESET));
         let more = self.complete;
         let mut editor = Editor::new().completer(|before| {
-            let own = complete(&command, before).into_iter().map(Candidate::from);
-            own.chain(more(before)).collect()
+            let mut completion = more(before);
+            if completion.from.is_none() {
+                let own = complete(&command, before).into_iter().map(Candidate::from);
+                completion.candidates = own.chain(completion.candidates).collect();
+            }
+            completion
         });
         if let Some(path) = self.history.take() {
             editor = editor.history_file(path);

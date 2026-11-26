@@ -388,6 +388,9 @@ the end of the line), the line is printed, and the drawing is repeated as it was
 | Up, Down | earlier and later lines (the interactive prompt only) |
 | Enter | accept |
 
+An implementation may offer more than this table: the Rust one moves by words, searches the
+history with Ctrl-R and scrolls a line that is longer than the terminal.
+
 Tab completion works like a menu. The first Tab collects the candidates that start with what
 was typed and puts the first one in its place (Shift-Tab: the last); more Tabs step through
 them and wrap around. While stepping, the candidates are shown on a row under the line, the

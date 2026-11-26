@@ -5,21 +5,35 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
 
-use crate::ctx::{self, BOLD, CYAN, DIM, RESET};
+use crate::ctx::{self, Theme, BOLD, CYAN, DIM, RESET};
 use crate::keys::{Key, Keys};
-use crate::text::{len, truncate};
+use crate::text::{len, pad, truncate, width};
 
-/// Something the word being typed could become, and optionally a few words about it, which
-/// are shown while it is the one picked.
+/// The candidates of a list that are on show at once.
+const LIST: usize = 8;
+
+/// Something the word being typed could become.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Candidate {
+    /// What is shown, and what is compared with what was typed.
     pub text: String,
+    /// A few words about it. When any candidate has some, the candidates are shown as a list,
+    /// one per line with its words, instead of in a row.
     pub about: String,
+    /// What goes on the line, when that is not `text` as it is. Without it, on a command line,
+    /// `text` goes in, in double quotes if it holds a space or a quote.
+    pub insert: Option<String>,
 }
 
 impl Candidate {
     pub fn new(text: impl Into<String>, about: impl Into<String>) -> Candidate {
-        Candidate { text: text.into(), about: about.into() }
+        Candidate { text: text.into(), about: about.into(), insert: None }
+    }
+
+    /// Put this on the line instead of the text that is shown.
+    pub fn insert(mut self, text: impl Into<String>) -> Candidate {
+        self.insert = Some(text.into());
+        self
     }
 }
 
@@ -38,6 +52,32 @@ impl From<String> for Candidate {
 impl From<(&str, &str)> for Candidate {
     fn from((text, about): (&str, &str)) -> Candidate {
         Candidate::new(text, about)
+    }
+}
+
+/// What a completer answers: the candidates, and optionally which part of the line they replace.
+///
+/// A `Vec<Candidate>` is a `Completion` too: the candidates then replace the word being typed,
+/// and those that do not start with it are left out. A word is what a shell would take as one:
+/// `"two words"` and `two\ words` are one word each.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Completion {
+    /// Where, in the text before the cursor, the part that is replaced begins (a byte offset).
+    /// When this is given, the completer has decided what fits: no candidate is left out.
+    pub from: Option<usize>,
+    pub candidates: Vec<Candidate>,
+}
+
+impl Completion {
+    /// Candidates that replace the text from byte `from` up to the cursor, all of them.
+    pub fn at(from: usize, candidates: Vec<Candidate>) -> Completion {
+        Completion { from: Some(from), candidates }
+    }
+}
+
+impl From<Vec<Candidate>> for Completion {
+    fn from(candidates: Vec<Candidate>) -> Completion {
+        Completion { from: None, candidates }
     }
 }
 
@@ -66,53 +106,159 @@ fn pop_first(text: &mut String) -> Option<char> {
     Some(first)
 }
 
+/// The word being typed at the end of `before`, the way a shell splits words: where it starts
+/// (a byte offset) and what it says without its quotes and backslashes.
+fn last_word(before: &str) -> (usize, String) {
+    let (mut start, mut word, mut quote) = (None, String::new(), None);
+    let mut chars = before.char_indices();
+    while let Some((at, c)) = chars.next() {
+        match (quote, c) {
+            (None, ' ' | '\t') => {
+                start = None;
+                word.clear();
+                continue;
+            }
+            (None, '\'' | '"') => quote = Some(c),
+            (Some(open), _) if c == open => quote = None,
+            (None | Some('"'), '\\') => {
+                if let Some((_, escaped)) = chars.next() {
+                    word.push(escaped);
+                }
+            }
+            _ => word.push(c),
+        }
+        start.get_or_insert(at);
+    }
+    (start.unwrap_or(before.len()), word)
+}
+
+/// `text` as one word of a command line: as it is, or in double quotes when it needs them.
+fn quoted(text: &str) -> String {
+    if !text.is_empty() && !text.contains([' ', '\t', '"', '\'', '\\']) {
+        return text.to_string();
+    }
+    format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+/// The candidates under the line: in a row, or, when they come with words about them, as a
+/// list. Ends with the move back up to the line.
+fn menu(t: Theme, candidates: &[Candidate], current: usize, max_width: isize) -> String {
+    let ellipsis = format!("{}{}{}", t.c(DIM), t.g("…", "~"), t.c(RESET));
+    if candidates.iter().all(|candidate| candidate.about.is_empty()) {
+        let (mut row, mut used) = (String::new(), 0);
+        for (i, candidate) in candidates.iter().enumerate() {
+            let candidate = &candidate.text;
+            let (i, width) = (i + 1, len(candidate) as isize + 2);
+            if used + width > max_width {
+                if i > current {
+                    row.push_str(&ellipsis);
+                    break;
+                }
+                row = format!("{ellipsis}  ");
+                used = 3;
+            }
+            if i == current {
+                row.push_str(&format!("{}{}{candidate}{}  ", t.c(BOLD), t.c(CYAN), t.c(RESET)));
+            } else {
+                row.push_str(&format!("{}{candidate}{}  ", t.c(DIM), t.c(RESET)));
+            }
+            used += width;
+        }
+        return format!("\n{row}\x1b[1A\r"); // below the line, then back up to it
+    }
+    // A list: as many as fit a short page, the one picked in the middle of it where it can be.
+    let n = candidates.len();
+    let top = (current - 1).saturating_sub(LIST / 2).min(n.saturating_sub(LIST));
+    let shown = &candidates[top..(top + LIST).min(n)];
+    let name = shown.iter().map(|candidate| width(&candidate.text)).max().unwrap_or(0);
+    let room = (max_width.max(10) as usize).saturating_sub(name + 2);
+    let mut lines = Vec::new();
+    for (i, candidate) in shown.iter().enumerate() {
+        let (text, about) = (pad(&candidate.text, name), truncate(&candidate.about, room));
+        lines.push(if top + i + 1 == current {
+            format!("{}{}{text}{}  {about}", t.c(BOLD), t.c(CYAN), t.c(RESET))
+        } else {
+            format!("{}{text}  {about}{}", t.c(DIM), t.c(RESET))
+        });
+    }
+    if n > LIST {
+        lines.push(format!("{}{}-{} of {n}{}", t.c(DIM), top + 1, top + shown.len(), t.c(RESET)));
+    }
+    let lines: Vec<&str> = lines.iter().map(|line| line.trim_end()).collect();
+    format!("\n{}\x1b[{}A\r", lines.join("\n"), lines.len())
+}
+
+/// Ctrl-R: look through the history for a line that holds what is typed. `Ok(line)` is a line
+/// to run, `Err(Some(line))` one to go on editing, `Err(None)` nothing.
+fn search(t: Theme, keys: &mut Keys, history: &[String]) -> Result<String, Option<String>> {
+    let (mut query, mut skip) = (String::new(), 0);
+    loop {
+        let hits = || history.iter().rev().filter(|line| line.contains(&query));
+        let hit = hits().nth(skip).cloned();
+        let found = hit.as_deref().unwrap_or("");
+        ctx::err(&format!("\r\x1b[J{}(search){} {query}{}:{} {found}", t.c(DIM), t.c(RESET), t.c(DIM), t.c(RESET)));
+        match keys.next() {
+            Key::Search if hits().nth(skip + 1).is_some() => skip += 1,
+            Key::Backspace => (_, skip) = (query.pop(), 0),
+            Key::Space => (_, skip) = (query.push(' '), 0),
+            Key::Char(character) if !character.is_control() => (_, skip) = (query.push(character), 0),
+            Key::Enter => return hit.ok_or(None),
+            Key::Interrupt | Key::Eof | Key::EndOfInput => return Err(None),
+            Key::Esc | Key::Left | Key::Right | Key::Home | Key::End | Key::Tab | Key::Up | Key::Down => {
+                return Err(hit);
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Read one line. `complete` is given the text before the cursor and returns what could stand
 /// in place of the word (or, for a value, the whole text) being typed. Tab and Shift-Tab step
-/// forwards and backwards through the candidates that match, shown on a row underneath.
-pub(crate) fn edit(prompt: &str, kind: Kind, complete: &dyn Fn(&str) -> Vec<Candidate>, history: &[String]) -> Edited {
+/// forwards and backwards through the candidates that match, shown underneath.
+pub(crate) fn edit(prompt: &str, kind: Kind, complete: &dyn Fn(&str) -> Completion, history: &[String]) -> Edited {
     let t = ctx::theme();
     let max_width = ctx::width() as isize - 2;
-    let ellipsis = format!("{}{}{}", t.c(DIM), t.g("…", "~"), t.c(RESET));
+    // What is left of the terminal's width for the line, the cursor included.
+    let room = ((ctx::width() as isize - 1 - width(prompt) as isize).max(10)) as usize;
     let (mut left, mut right) = (String::new(), String::new());
-    let (mut stem, mut word, mut draft) = (String::new(), String::new(), String::new());
+    let (mut original, mut draft) = (String::new(), String::new());
     let mut candidates: Vec<Candidate> = Vec::new();
     let mut current = 0; // 1-based position among the candidates; 0 when not stepping through them
+    let mut word_at = 0; // where in `left` the text that the candidates replace begins
     let mut recalled = 0; // how far back in the history
-                          // On a command line Ctrl-C clears what was typed; in a question it ends the program.
+    let mut scroll = 0; // the first character on show of a line too long for the terminal
+
+    // On a command line Ctrl-C clears what was typed; in a question it ends the program.
     let mut keys = if kind == Kind::Line { Keys::open_with_interrupts() } else { Keys::open() };
 
     loop {
-        let mut menu = String::new();
-        if current > 0 && candidates.len() > 1 {
-            let mut used = 0;
-            for (i, candidate) in candidates.iter().enumerate() {
-                let candidate = &candidate.text;
-                let (i, width) = (i + 1, len(candidate) as isize + 2);
-                if used + width > max_width {
-                    if i > current {
-                        menu.push_str(&ellipsis);
-                        break;
-                    }
-                    menu = format!("{ellipsis}  ");
-                    used = 3;
-                }
-                if i == current {
-                    menu.push_str(&format!("{}{}{candidate}{}  ", t.c(BOLD), t.c(CYAN), t.c(RESET)));
-                } else {
-                    menu.push_str(&format!("{}{candidate}{}  ", t.c(DIM), t.c(RESET)));
-                }
-                used += width;
+        let under =
+            if current > 0 && candidates.len() > 1 { menu(t, &candidates, current, max_width) } else { String::new() };
+        let (typed, cursor) = (len(&left) + len(&right), len(&left));
+        let mut frame = format!("\r\x1b[J{under}{prompt}");
+        if typed < room {
+            scroll = 0;
+            frame.push_str(&format!("{left}{right}"));
+            if !right.is_empty() {
+                frame.push_str(&format!("\x1b[{}D", len(&right)));
             }
-            // What the candidate picked is, if it says and there is room left.
-            let about = &candidates[current - 1].about;
-            if !about.is_empty() && max_width - used >= 4 {
-                menu.push_str(&format!("{}{}{}", t.c(DIM), truncate(about, (max_width - used) as usize), t.c(RESET)));
+        } else {
+            // Longer than the terminal: show the part around the cursor, with a mark at each
+            // end where there is more.
+            scroll = scroll.min(cursor).max((cursor + 1).saturating_sub(room));
+            let end = (scroll + room).min(typed);
+            let mut shown: Vec<char> = left.chars().chain(right.chars()).skip(scroll).take(end - scroll).collect();
+            let mark = t.g("…", "~").chars().next().unwrap_or('~');
+            if scroll > 0 {
+                shown[0] = mark;
             }
-            menu = format!("\n{menu}\x1b[1A\r"); // below the line, then back up to it
-        }
-        let mut frame = format!("\r\x1b[J{menu}{prompt}{left}{right}");
-        if !right.is_empty() {
-            frame.push_str(&format!("\x1b[{}D", len(&right)));
+            if end < typed {
+                *shown.last_mut().expect("a line on show") = mark;
+            }
+            frame.push_str(&shown.iter().collect::<String>());
+            if end > cursor {
+                frame.push_str(&format!("\x1b[{}D", end - cursor));
+            }
         }
         ctx::err(&frame);
 
@@ -128,8 +274,8 @@ pub(crate) fn edit(prompt: &str, kind: Kind, complete: &dyn Fn(&str) -> Vec<Cand
         match key {
             Key::Tab | Key::BackTab => {}
             Key::Esc if current > 0 => {
-                left.truncate(left.len() - word.len());
-                left.push_str(&stem);
+                left.truncate(word_at);
+                left.push_str(&original);
                 current = 0;
                 candidates.clear();
                 continue;
@@ -143,27 +289,35 @@ pub(crate) fn edit(prompt: &str, kind: Kind, complete: &dyn Fn(&str) -> Vec<Cand
             Key::Enter => break,
             Key::Tab | Key::BackTab => {
                 if current == 0 {
-                    stem = match kind {
-                        Kind::Line => left.rsplit(' ').next().unwrap_or_default().to_string(),
-                        Kind::Value => left.clone(),
+                    let completion = complete(&left);
+                    let given = completion.from.filter(|from| kind == Kind::Line && left.is_char_boundary(*from));
+                    let (from, stem) = match (kind, given) {
+                        (Kind::Value, _) => (0, left.clone()),
+                        (Kind::Line, Some(from)) => (from, String::new()),
+                        (Kind::Line, None) => last_word(&left),
                     };
-                    word = stem.clone();
-                    candidates = complete(&left)
+                    candidates = completion
+                        .candidates
                         .into_iter()
-                        .filter(|c| !c.text.is_empty() && c.text.starts_with(&stem))
+                        .filter(|c| !c.text.is_empty() && (given.is_some() || c.text.starts_with(&stem)))
                         .collect();
                     if candidates.is_empty() {
                         continue;
                     }
+                    (word_at, original) = (from, left[from..].to_string());
                     current = if key == Key::Tab { 1 } else { candidates.len() };
                 } else if key == Key::Tab {
                     current = current % candidates.len() + 1;
                 } else {
                     current = (current + candidates.len() - 2) % candidates.len() + 1;
                 }
-                left.truncate(left.len() - word.len());
-                word = candidates[current - 1].text.clone();
-                left.push_str(&word);
+                let picked = &candidates[current - 1];
+                left.truncate(word_at);
+                left.push_str(&match (&picked.insert, kind) {
+                    (Some(insert), _) => insert.clone(),
+                    (None, Kind::Line) => quoted(&picked.text),
+                    (None, Kind::Value) => picked.text.clone(),
+                });
                 if candidates.len() == 1 {
                     // only one: take it
                     if kind == Kind::Line {
@@ -196,6 +350,18 @@ pub(crate) fn edit(prompt: &str, kind: Kind, complete: &dyn Fn(&str) -> Vec<Cand
                     left.push(character);
                 }
             }
+            Key::WordLeft => {
+                // Over the spaces before the cursor, then over the word before them.
+                let word = left.trim_end_matches(' ').rfind(' ').map_or(0, |space| space + 1);
+                right.insert_str(0, &left[word..]);
+                left.truncate(word);
+            }
+            Key::WordRight => {
+                let spaces = right.len() - right.trim_start_matches(' ').len();
+                let word = right[spaces..].find(' ').map_or(right.len(), |space| spaces + space);
+                left.push_str(&right[..word]);
+                right.drain(..word);
+            }
             Key::Home => {
                 right.insert_str(0, &left);
                 left.clear();
@@ -227,6 +393,14 @@ pub(crate) fn edit(prompt: &str, kind: Kind, complete: &dyn Fn(&str) -> Vec<Cand
                 right.clear();
                 left = if recalled > 0 { history[history.len() - recalled].clone() } else { draft.clone() };
             }
+            Key::Search if kind == Kind::Line && !history.is_empty() => match search(t, &mut keys, history) {
+                Ok(line) => {
+                    (left, right) = (line, String::new());
+                    break;
+                }
+                Err(Some(line)) => (left, right) = (line, String::new()),
+                Err(None) => {}
+            },
             Key::Eof => {
                 if left.is_empty() && right.is_empty() {
                     drop(keys);
@@ -266,22 +440,24 @@ pub enum Read {
     End,
 }
 
-type Completer<'a> = Box<dyn Fn(&str) -> Vec<Candidate> + 'a>;
+type Completer<'a> = Box<dyn Fn(&str) -> Completion + 'a>;
 
 /// A line editor for a program with a prompt of its own: a shell, a console, a REPL.
 ///
-/// At a terminal the line can be edited (see the keys in `SPEC.md`), Tab and Shift-Tab step
-/// through what the completer offers, and Up and Down walk the history. Without a terminal
-/// it reads a line of standard input.
+/// At a terminal the line can be edited (see the keys in `SPEC.md`; also Alt-B and Alt-F or
+/// Ctrl-Left and Ctrl-Right to move by words, and Ctrl-R to search the history), Tab and
+/// Shift-Tab step through what the completer offers, and Up and Down walk the history. A line
+/// longer than the terminal scrolls sideways. Without a terminal it reads a line of standard
+/// input.
 ///
 /// ```no_run
 /// use clikit::{Candidate, Editor, Read};
 ///
 /// let mut editor = Editor::new()
 ///     .history_file(".myshell_history")
-///     .completer(|before| match before.rsplit(' ').nth(1) {
-///         None => vec![Candidate::new("open", "Open a file"), Candidate::new("close", "Close it")],
-///         Some(_) => vec!["notes.txt".into(), "todo.txt".into()],
+///     .completer(|before| match before.contains(' ') {
+///         false => vec![Candidate::new("open", "Open a file"), Candidate::new("close", "Close it")],
+///         true => vec!["notes.txt".into(), "My Documents".into()], // goes in as "My Documents"
 ///     });
 /// while let Read::Line(line) = editor.read("myshell> ") {
 ///     println!("you typed: {line}");
@@ -301,14 +477,14 @@ impl Default for Editor<'_> {
 
 impl<'a> Editor<'a> {
     pub fn new() -> Editor<'a> {
-        Editor { history: Vec::new(), file: None, complete: Box::new(|_| Vec::new()) }
+        Editor { history: Vec::new(), file: None, complete: Box::new(|_| Completion::default()) }
     }
 
-    /// What Tab offers. The function gets the text before the cursor and returns what the
-    /// word being typed (everything after the last space) could become; candidates that do not
-    /// start with what was typed are left out.
-    pub fn completer(mut self, complete: impl Fn(&str) -> Vec<Candidate> + 'a) -> Editor<'a> {
-        self.complete = Box::new(complete);
+    /// What Tab offers. The function gets the text before the cursor and returns candidates:
+    /// a `Vec<Candidate>` for the word being typed (see [`Completion`]), or a [`Completion`]
+    /// that says itself which part of the line is replaced.
+    pub fn completer<C: Into<Completion>>(mut self, complete: impl Fn(&str) -> C + 'a) -> Editor<'a> {
+        self.complete = Box::new(move |before| complete(before).into());
         self
     }
 
@@ -355,5 +531,29 @@ impl<'a> Editor<'a> {
             Edited::Interrupted => Read::Interrupted,
             Edited::End | Edited::Cancelled => Read::End,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_word_being_typed_is_a_shell_word() {
+        assert_eq!(last_word("open rep"), (5, "rep".to_string()));
+        assert_eq!(last_word("open \"Annual re"), (5, "Annual re".to_string()));
+        assert_eq!(last_word("get Library/App\\ Sup"), (4, "Library/App Sup".to_string()));
+        assert_eq!(last_word("open "), (5, String::new()));
+        assert_eq!(last_word("a 'b c' d"), (8, "d".to_string()));
+        assert_eq!(last_word(""), (0, String::new()));
+    }
+
+    #[test]
+    fn a_candidate_goes_in_as_one_word() {
+        assert_eq!(quoted("list"), "list");
+        assert_eq!(quoted("Annual report 2026"), "\"Annual report 2026\"");
+        assert_eq!(quoted("say \"hi\""), "\"say \\\"hi\\\"\"");
+        // What goes in comes out again as the one word it was.
+        assert_eq!(crate::split_words(&quoted("a \\ \"b\" 'c'")).unwrap(), ["a \\ \"b\" 'c'"]);
     }
 }

@@ -253,6 +253,16 @@ fn main() {
 - `clikit::Editor` is the line editor alone, for a prompt that has nothing to do with clap:
   `Editor::new().history_file(path).completer(|before| ...)`, then `editor.read("> ")` gives
   `Read::Line(text)`, `Read::Interrupted` (Ctrl-C on an empty line) or `Read::End`.
+  - The completer returns candidates for the word being typed, and a word is what a shell
+    takes as one: `"Annual re` is one word, and the candidate `Annual report` goes in as
+    `"Annual report"`. `Candidate::new(text, about).insert(other)` puts something else on the
+    line than it shows; `Completion::at(from, candidates)` says itself which part of the line
+    is replaced, and then nothing is filtered.
+  - Candidates that come with a few words about them are shown as a list, one per line;
+    without, in a row.
+  - Besides the keys in `SPEC.md`: Alt-B and Alt-F (or Ctrl-Left and Ctrl-Right) move by
+    words, Ctrl-R searches the history (Enter runs what was found, Escape leaves it on the
+    line), and a line longer than the terminal scrolls sideways.
 - A mode forced by a flag is passed on to programs started with `exec` and `spin_command`, as
   `CLI_MODE`.
 
@@ -280,7 +290,8 @@ use `clikit::testing::print` for output a test needs to see.
   `set_mode`, which sets both.
 - Key-driven prompts use `stty` to read single keys, so they exist on Unix only. On Windows the
   prompts are the numbered, line-based ones. Windows is untested.
-- A line longer than the terminal is wide confuses the line editor.
+- Wide characters (CJK, emoji) in a line that is longer than the terminal put the cursor of
+  the line editor in the wrong place.
 - `table`, `kv` and `boxed` measure what a terminal shows: colour codes take no room (a cell may
   be `style("green", "online")`), emoji and CJK two columns. `timeline` and `tree` count
   characters, so text given to them must be plain. A coloured cell that has to be cut loses its

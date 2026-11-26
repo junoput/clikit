@@ -160,7 +160,7 @@ pub fn input_with<S: AsRef<str>>(
     if keys_available() {
         let shown = if default.is_empty() { String::new() } else { format!(" {}({default}){}", t.c(DIM), t.c(RESET)) };
         let prompt = format!("{}?{} {question}{shown} ", t.c(CYAN), t.c(RESET));
-        let complete = |_: &str| suggestions.iter().map(|s| s.as_ref().into()).collect();
+        let complete = |_: &str| suggestions.iter().map(|s| s.as_ref().into()).collect::<Vec<_>>().into();
         match edit(&prompt, Kind::Value, &complete, &[]) {
             Edited::Cancelled => return Err(PromptError::Cancelled),
             Edited::Text(text) => (answer, answered) = (text, true),

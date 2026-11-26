@@ -27,6 +27,11 @@ pub(crate) enum Key {
     Eof,
     /// Ctrl-C, for a reader that asked to be told instead of having the program end.
     Interrupt,
+    /// Alt-B or Ctrl-Left, Alt-F or Ctrl-Right: a word to the left, to the right.
+    WordLeft,
+    WordRight,
+    /// Ctrl-R.
+    Search,
     /// A key we have no use for, such as Page Up.
     Other,
     Char(char),
@@ -121,6 +126,7 @@ impl Keys {
             0x0b => Key::KillRight,
             0x17 => Key::KillWord,
             0x04 => Key::Eof,
+            0x12 => Key::Search,
             ascii if ascii < 0x80 => Key::Char(ascii as char),
             lead => {
                 // The first byte of a multi-byte character says how many follow.
@@ -152,9 +158,14 @@ impl Keys {
         if first == b'\n' {
             return Key::Esc; // piped input: a line that holds only an escape
         }
-        if first != b'[' && first != b'O' {
-            self.unread = Some(first); // Escape, then an ordinary key
-            return Key::Esc;
+        match first {
+            b'b' => return Key::WordLeft, // Alt-B, as terminals send it
+            b'f' => return Key::WordRight,
+            b'[' | b'O' => {}
+            _ => {
+                self.unread = Some(first); // Escape, then an ordinary key
+                return Key::Esc;
+            }
         }
         let mut sequence = vec![first];
         if let Some(mut byte) = self.byte(false) {
@@ -178,6 +189,8 @@ impl Keys {
             b"[H" | b"OH" | b"[1~" | b"[7~" => Key::Home,
             b"[F" | b"OF" | b"[4~" | b"[8~" => Key::End,
             b"[3~" => Key::Delete,
+            b"[1;5D" | b"[1;3D" | b"[5D" => Key::WordLeft,
+            b"[1;5C" | b"[1;3C" | b"[5C" => Key::WordRight,
             _ => Key::Other,
         }
     }

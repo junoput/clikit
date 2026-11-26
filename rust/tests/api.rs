@@ -204,6 +204,63 @@ fn editor_completes_with_descriptions_and_keeps_its_history() {
     std::fs::remove_file(&file).unwrap();
 }
 
+/// Type `keys` at an [`clikit::Editor`] with this completer and give back the lines it read.
+fn typed_lines(columns: &str, keys: &str, complete: impl Fn(&str) -> clikit::Completion) -> (Vec<String>, String) {
+    use clikit::{Editor, Read};
+    let mut lines = Vec::new();
+    let session = Session::new(Mode::Rich).env("CLI_INTERACTIVE", "1").env("NO_COLOR", "1").env("LANG", "en_US.UTF-8");
+    let run = session.env("COLUMNS", columns).stdin(keys).run(|| {
+        let mut editor = Editor::new().completer(complete);
+        while let Read::Line(line) = editor.read("> ") {
+            lines.push(line);
+        }
+    });
+    (lines, run.err)
+}
+
+#[test]
+fn editor_completes_words_the_way_a_shell_splits_them() {
+    use clikit::{Candidate, Completion};
+    let complete = |before: &str| -> Completion {
+        if let Some(typed) = before.strip_prefix("go ") {
+            // The completer says itself what is replaced, and what goes in.
+            let rooms =
+                vec![Candidate::new("Room 1", "upstairs").insert("room-1"), Candidate::new("Room 2", "the cellar")];
+            return Completion::at(before.len() - typed.len(), rooms);
+        }
+        match before.starts_with("open ") {
+            true => vec!["Annual report".into(), "Annual review".into(), "notes.txt".into()].into(),
+            false => vec![Candidate::from("open")].into(),
+        }
+    };
+    let keys = "op\tAn\t\nopen \"Annual rev\t\nopen no\t\ngo xyz\t\t\n";
+    let (lines, err) = typed_lines("80", keys, complete);
+    assert_eq!(lines[0], "open \"Annual report\"", "a name with a space goes in as one quoted word");
+    assert_eq!(lines[1], "open \"Annual review\" ", "a word that was begun in quotes is completed whole");
+    assert_eq!(lines[2], "open notes.txt ", "a plain name stays plain");
+    assert_eq!(lines[3], "go \"Room 2\"", "all candidates are kept when the completer gave the place");
+    // Candidates with words about them are a list: one per line, then back up over both lines.
+    assert!(err.contains("\nRoom 1  upstairs\nRoom 2  the cellar\x1b[2A\r> go room-1"), "{err:?}");
+}
+
+#[test]
+fn editor_scrolls_a_long_line_and_moves_by_words() {
+    let none = |_: &str| clikit::Completion::default();
+    // 40 characters in a terminal of 30: the end is on show, then (Ctrl-A) the start.
+    let long = "0123456789".repeat(4);
+    let (lines, err) = typed_lines("30", &format!("{long}\x01\n"), none);
+    assert_eq!(lines, std::slice::from_ref(&long), "the whole line comes back");
+    assert!(err.contains("\r\x1b[J> …5678901234567890123456789"), "{err:?}");
+    assert!(err.contains("\r\x1b[J> 01234567890123456789012345…\x1b[27D"), "{err:?}");
+
+    // Alt-B twice and a letter; Ctrl-Left twice, Alt-F and a letter; then Ctrl-R finds a line
+    // of the history: Enter runs it, Escape leaves it on the line to go on with.
+    let keys = "alpha beta gamma\x1bb\x1bbX\none two\x1b[1;5D\x1b[1;5D\x1bf!\n\x12alp\n\x12one\x1b?\n";
+    let (lines, err) = typed_lines("80", keys, none);
+    assert_eq!(lines, ["alpha Xbeta gamma", "one! two", "alpha Xbeta gamma", "one! two?"]);
+    assert!(err.contains("(search) alp: alpha Xbeta gamma"), "{err:?}");
+}
+
 #[test]
 fn tasks_on_threads() {
     let run = capture(Mode::Agent, || {
