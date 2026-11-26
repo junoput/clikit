@@ -23,8 +23,9 @@ rich                                      plain                 agent
 ## Features
 
 Every picture is drawn by [`docs/render.py`](docs/render.py) from what the code prints at a
-terminal, so it shows the real thing. The Rust crate prints the same bytes as the shell
-functions named in the pictures.
+terminal, so it shows the real thing. The ones that move are recordings of a run as it happened,
+the keys that were typed and their timing included. The Rust crate prints the same bytes as the
+shell functions named in the pictures.
 
 ### Status lines and steps
 

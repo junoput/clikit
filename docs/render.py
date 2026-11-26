@@ -6,15 +6,21 @@
 
 Each picture runs a few lines of shell against sh/cli.sh in rich mode, feeds the output to a
 small terminal (colours, carriage return, cursor up, erase), and draws the screen that results.
-Nothing is drawn by hand, so a picture shows what the code really prints.
+Nothing is drawn by hand, so a picture shows what the code really prints. A picture that moves
+is a recording: the run as it happened, keys typed one at a time, each drawing shown for as
+long as it was on the screen.
 
 Lines, bars and dots are drawn as shapes and every other character sits at its own position,
 so the picture lines up whatever monospace font the reader has.
 """
+import codecs
 import os
 import re
+import select
 import subprocess
 import sys
+import threading
+import time
 from xml.sax.saxutils import escape
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -27,7 +33,7 @@ FONT = "ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',m
 BACK, EDGE, FORE = "#0d1117", "#30363d", "#c9d1d9"
 COLOURS = {31: "#ff7b72", 32: "#3fb950", 33: "#d29922", 34: "#58a6ff", 35: "#bc8cff", 36: "#39c5cf",
            37: FORE, 90: "#8b949e"}
-CANCEL = r"\x1b\[\d+A\x1b\[J[^\n]*\(cancelled\)"  # where a prompt gives up when its input ends
+TYPING, PAUSE, HOLD = 0.09, 0.5, 3.5  # seconds: between two keys, between two things typed, on the last frame
 
 BACKUPS = '''"2024-02-01 | iPhone 12 | 38.7 GB" "2024-07-11 | iPad | 11.9 GB" "2025-01-15 | iPhone 12 | 40.2 GB" \\
   "2025-06-01 | iPhone 15 | continues iPhone 12 | iPhone 12" "2025-11-20 | iPad | 12.8 GB" \\
@@ -36,41 +42,51 @@ FILES = '''"Photos/2024/rome.jpg | 2.1 MB" "Photos/2024/wedding.jpg | 3.4 MB" "P
   "Notes/todo.txt | 4 KB" "Notes/ideas.md | 12 KB" "Contacts.vcf | 310 KB"'''
 
 # name: the columns of the terminal, the lines shown as typed, the code that runs (or a command
-# of its own), and options: keys (typed into the prompts), cut (drop the output from the last
-# match on; back=2: from the one before it), frames (animate).
+# of its own), and options:
+#   keys      what is typed into the prompts. For a moving picture, a list: each item is typed
+#             a key at a time (an escape sequence at once), with a pause before the next item.
+#   animate   record the run as it happens, and play it back in a loop
+#   cut       for a still picture: drop the output from the last match on (back=2: the one before)
 SHOTS = {
-    "tasks": dict(cols=62, frames=True, show=[
+    "tasks": dict(cols=62, animate=True, show=[
         'cli_tasks "Backup" "Scan | 1" "Photos | 6" "Messages | 2" "Verify | 1"',
-        'cli_task Photos "$i" "$n"    # in your loop'], code='''
+        'cli_task Photos "$i" "$n"    # in your loop'], code="""
 cli_tasks "Backup" "Scan | 1" "Photos | 6" "Messages | 2" "Verify | 1"
 i=0; while [ $i -lt 4 ]; do i=$((i + 1)); cli_task Scan; sleep 0.12; done; cli_task_done Scan
 i=0; while [ $i -lt 12 ]; do i=$((i + 1)); sleep 0.12; cli_task Photos $((i * 10)) 120; done
 i=0; while [ $i -lt 6 ]; do i=$((i + 1)); sleep 0.12; cli_task Messages $((i * 50)) 300; done
 i=0; while [ $i -lt 3 ]; do i=$((i + 1)); cli_task Verify; sleep 0.12; done; cli_task_done Verify
-cli_tasks_done'''),
-    "stack": dict(cols=78, show=['cli_tasks "Sync" "iPhone | 1 | bytes rate eta" "Watch | 1 | percent" ...',
-                                 'cli_task_note Watch "verifying"'], code='''
-cli_tasks -t 96 "Sync" Passcode "iPhone | 1 | bytes rate eta" "iPad | 1 | bytes rate eta" "Watch | 1 | percent" Mac
+cli_tasks_done"""),
+    "stack": dict(cols=78, animate=True, show=['cli_tasks "Sync" "iPhone | 1 | bytes rate eta" "Watch | 1 | percent" ...',
+                                               'cli_task_note Watch "verifying"'], code="""
+cli_tasks -t 60 "Sync" Passcode "iPhone | 1 | bytes rate eta" "iPad | 1 | bytes rate eta" "Watch | 1 | percent" Mac
 cli_task_skip Passcode
-cli_task -t 95 iPhone 3221225472 4294967296
-cli_task -t 40 iPad 322122547 6442450944
-cli_task Watch 40 100; cli_task_note Watch "verifying"
-cli_task_fail Mac "not reachable"'''),
-    "messages": dict(cols=62, code="""
+i=0
+while [ $i -lt 16 ]; do
+  i=$((i + 1)); sleep 0.16
+  cli_task -t 60 iPhone $((2147483648 + i * 134217728)) 4294967296
+  cli_task -t 25 iPad $((i * 201326592)) 6442450944
+  cli_task Watch $((i * 5)) 100
+  case $i in 3) cli_task_note Watch "verifying";; 6) cli_task_fail Mac "not reachable";; 10) cli_task_note Watch "installing";; esac
+done"""),
+    "messages": dict(cols=62, animate=True, show=['cli_steps 2', 'cli_step "Build"', 'cli_info "Using the cache"',
+                                                  'cli_ok "42 files compiled"', 'cli_warn "2 tests skipped"',
+                                                  'cli_error "Connection refused"', 'cli_hint "Try again with --verbose"'],
+                     code="""
 cli_steps 2
-cli_step "Build"
-cli_info "Using the cache"
-cli_ok "42 files compiled"
-cli_step "Deploy"
-cli_warn "2 tests skipped"
-cli_error "Connection refused"
+cli_step "Build"; sleep 0.5
+cli_info "Using the cache"; sleep 0.5
+cli_ok "42 files compiled"; sleep 0.6
+cli_step "Deploy"; sleep 0.5
+cli_warn "2 tests skipped"; sleep 0.6
+cli_error "Connection refused"; sleep 0.5
 cli_hint "Try again with --verbose\""""),
-    "progress": dict(cols=62, show=['cli_progress "$i" 40 "Downloading"     # in your loop', 'cli_spin "Compiling" make',
-                                    'cli_spin "Linking" make link', 'cli_progress "$i" 40 "Uploading"'], code="""
-cli_progress 40 40 "Downloading"
-cli_spin "Compiling" sleep 1.1
-cli_spin "Linking" sh -c "echo undefined symbol: main; exit 1" || true
-cli_progress 3 40 "Uploading"; sleep 0.9; cli_progress 14 40 "Uploading\""""),
+    "progress": dict(cols=62, animate=True, show=['cli_progress "$i" 40 "Downloading"     # in your loop',
+                                                  'cli_spin "Compiling" make', 'cli_spin "Linking" make link'], code="""
+i=0; while [ $i -lt 20 ]; do i=$((i + 1)); sleep 0.07; cli_progress $((i * 2)) 40 "Downloading"; done
+cli_spin "Compiling" sleep 1.5
+cli_spin "Linking" sh -c "sleep 0.7; echo undefined symbol: main; exit 1" || true
+i=0; while [ $i -lt 14 ]; do i=$((i + 1)); sleep 0.09; cli_progress $i 40 "Uploading"; done"""),
     "table": dict(cols=62, show=['cli_table "Item | Qty | Price" "Apple | 3 | 1.20" ...',
                                  'cli_table -k Id "Device | State | Id" ROW...'], code="""
 cli_table "Item | Qty | Price" "Apple | 3 | 1.20" "Melon | 12 | 10.00" "Fig | 100 | 0.50"
@@ -87,18 +103,21 @@ cli_box -t "Next steps" "Verify the backup" "Unplug the device\""""),
     "timeline": dict(cols=72, show=["cli_timeline ROW...        # WHEN | TRACK | LABEL | FROM", "cli_timeline -v ROW..."],
                      code="cli_timeline %s\ncli_nl\ncli_timeline -v %s" % (BACKUPS, BACKUPS)),
     "tree": dict(cols=50, show=["cli_tree ROW...            # PATH | NOTE"], code="cli_tree %s" % FILES),
-    "browse": dict(cols=72, keys="jlj", cut=CANCEL, cwd=os.path.join(ROOT, "conformance"),
+    "browse": dict(cols=72, animate=True, cwd=os.path.join(ROOT, "conformance"),
+                   keys=["\x1b[B", "\x1b[C", "\x1b[B", "\x1b[C", "\x1b[B", "\x1b[D", "\x1b[D", "\x1b[B", "\n"],
                    show=['file=$(cli_browse "Open which file" files)'], code='cli_browse "Open which file" files'),
-    "prompts": dict(cols=62, keys="j\ny jj ", cut=CANCEL, show=['env=$(cli_select "Deploy to" staging production)',
-                    'cli_confirm "Run the migrations?" y', 'who=$(cli_multiselect "Notify" email slack pager sms)'], code='''
+    "prompts": dict(cols=62, animate=True, keys=["\x1b[B", "\n", "y", " ", "\x1b[B", "\x1b[B", " ", "\n"],
+                    show=['env=$(cli_select "Deploy to" staging production)', 'cli_confirm "Run the migrations?" y',
+                          'who=$(cli_multiselect "Notify" email slack pager sms)'], code="""
 cli_select "Deploy to" staging production >/dev/null
 cli_confirm "Run the migrations?" y
-cli_multiselect "Notify" email slack pager sms'''),
-    # When the keys run out, the line is taken and a new prompt drawn: go back two drawings.
-    "interactive": dict(cols=72, keys="add Buy milk\nli\t\n\t", cut=r"\r\x1b\[J", back=2, show=["todo -i"],
+cli_multiselect "Notify" email slack pager sms >/dev/null"""),
+    "interactive": dict(cols=72, animate=True, show=["todo -i"],
+                        keys=["add Buy milk", "\n", "li", "\t", "\n", "\t", "\t", "\t", "\x15", "exit", "\n"],
                         code='TODO_FILE=$(mktemp) "%s" -i' % os.path.join(ROOT, "sh", "examples", "todo.sh")),
     # The line editor is in the Rust crate: this one runs its demo (cargo build --features clap --example demo).
-    "editor": dict(cols=78, keys="open \t", cut=r"\r\x1b\[J", back=2, show=["demo editor"],
+    "editor": dict(cols=78, animate=True, show=["demo editor"],
+                   keys=["op", "\t", "\t", "\n", "open No", "\t", "I", "\t", "\n", "ex", "\t", "\n"],
                    command=[os.path.join(ROOT, "rust", "target", "debug", "examples", "demo"), "editor"]),
     "help": dict(cols=72, show=["todo --help"], code='TODO_FILE=/dev/null "%s" --help' % os.path.join(ROOT, "sh", "examples", "todo.sh")),
 }
@@ -245,23 +264,22 @@ def draw(rows):
     return "".join(parts)
 
 
-def svg(frames, cols):
-    """One picture; several frames play in a loop, the last one held."""
+def svg(frames, cols, times=None):
+    """One picture. Several frames play in a loop, each for its time, the last one held."""
     height = PAD * 2 + max(len(rows) for rows in frames) * LH
     width = PAD * 2 + cols * CW
     out = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %.0f %.0f" width="%.0f" height="%.0f" '
            'font-family="%s" font-size="%s">' % (width, height, width, height, FONT, SIZE)]
     if len(frames) > 1:
-        step, hold = 0.12, 3.0
-        total, rules = step * (len(frames) - 1) + hold, []
-        for i in range(len(frames)):
+        total, at, rules = sum(times), 0.0, []
+        for i, time_on_show in enumerate(times):
             # Each frame is on show for its own slice of the loop; step-end switches without blending.
-            start = 100 * step * i / total
-            end = 100 if i == len(frames) - 1 else 100 * step * (i + 1) / total
+            start, at = 100 * at / total, at + time_on_show
+            end = 100 if i == len(frames) - 1 else 100 * at / total
             stops = {0.0: "hidden", 100.0: "hidden"}
             stops[round(start, 3)] = "visible"
             stops[round(end, 3)] = "visible" if end == 100 else "hidden"
-            keys = "".join("%s%%{visibility:%s}" % (at, stops[at]) for at in sorted(stops))
+            keys = "".join("%s%%{visibility:%s}" % (stop, stops[stop]) for stop in sorted(stops))
             rules.append("@keyframes f%d{%s}.f%d{animation:f%d %.2fs step-end infinite}" % (i, keys, i, i, total))
         out.append("<style>.f{visibility:hidden}%s</style>" % "".join(rules))
     out.append('<rect x="0.5" y="0.5" width="%.0f" height="%.0f" rx="8" fill="%s" stroke="%s"/>' % (width - 1, height - 1, BACK, EDGE))
@@ -271,6 +289,44 @@ def svg(frames, cols):
     return "".join(out)
 
 
+def record(command, env, cwd, keys):
+    """Run a command and return what it printed as it printed it: (seconds since the start, text)
+    pairs. The keys are typed meanwhile, the way a person would: a key at a time, with pauses."""
+    process = subprocess.Popen(command, env=env, cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT)
+
+    def type_keys():
+        try:
+            for item in keys:
+                time.sleep(PAUSE)
+                for key in [item] if item.startswith("\x1b") else item:
+                    process.stdin.write(key.encode())
+                    process.stdin.flush()
+                    time.sleep(TYPING)
+            time.sleep(PAUSE)
+            process.stdin.close()
+        except OSError:
+            pass  # the program left before the last key
+
+    threading.Thread(target=type_keys, daemon=True).start()
+    start, events, text = time.time(), [], codecs.getincrementaldecoder("utf-8")("replace")
+    stream = process.stdout.fileno()
+    while True:
+        if not select.select([stream], [], [], 0.05)[0]:
+            continue
+        at, data = time.time() - start, os.read(stream, 65536)
+        if not data:
+            break
+        while select.select([stream], [], [], 0.02)[0]:  # the rest of one drawing arrives at once
+            more = os.read(stream, 65536)
+            if not more:
+                break
+            data += more
+        events.append((at, text.decode(data)))
+    process.wait()
+    return events
+
+
 def render(name, shot):
     env = {key: os.environ[key] for key in ("PATH", "HOME", "TMPDIR") if key in os.environ}
     env.update(CLI_MODE="rich", COLUMNS=str(shot["cols"]), LANG="en_US.UTF-8", TERM="xterm", CLI_AGENT="0")
@@ -278,25 +334,39 @@ def render(name, shot):
         env["CLI_INTERACTIVE"] = "1"
     command = shot.get("command") or ["bash", "-c", '. "%s"\n%s' % (CLI, shot["code"])]
     if not os.path.exists(command[0]) and os.sep in command[0]:
-        print("%-10s skipped: %s is not built" % (name, os.path.relpath(command[0], ROOT)))
+        print("%-12s skipped: %s is not built" % (name, os.path.relpath(command[0], ROOT)))
         return
-    done = subprocess.run(command, env=env, cwd=shot.get("cwd", ROOT),
-                          input=shot.get("keys", "").encode(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    raw = done.stdout.decode()
-    if "cut" in shot:
-        raw = raw[:[match.start() for match in re.finditer(shot["cut"], raw)][-shot.get("back", 1)]]
     screen = Screen()
     shown = shot.get("show") or shot["code"].strip().split("\n")
     screen.feed("".join("\x1b[90m$\x1b[0m %s\n" % line for line in shown) + "\n")
-    frames = []
-    for piece in re.split(r"(?<=\x1b\[J)", raw) if shot.get("frames") else [raw]:
-        screen.feed(piece)
+    frames, times = [], []
+    if shot.get("animate"):
+        events = record(command, env, shot.get("cwd", ROOT), shot.get("keys", []))
+        for i, (at, text) in enumerate(events):
+            screen.feed(text)
+            # On show until the next drawing: not shorter than the eye needs, not longer than a pause.
+            pause = events[i + 1][0] - at if i + 1 < len(events) else HOLD
+            pause = HOLD if i + 1 == len(events) else min(max(pause, 0.06), 1.2)
+            rows = screen.snapshot()
+            if frames and rows == frames[-1]:
+                times[-1] += pause
+            else:
+                frames.append(rows)
+                times.append(pause)
+    else:
+        done = subprocess.run(command, env=env, cwd=shot.get("cwd", ROOT), input="".join(shot.get("keys", "")).encode(),
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        raw = done.stdout.decode()
+        if "cut" in shot:
+            raw = raw[:[match.start() for match in re.finditer(shot["cut"], raw)][-shot.get("back", 1)]]
+        screen.feed(raw)
         frames.append(screen.snapshot())
     used = max(len(row) for rows in frames for row in rows)
     path = os.path.join(OUT, name + ".svg")
     with open(path, "w", encoding="utf-8") as file:
-        file.write(svg(frames, max(used, 40)))
-    print("%-10s %2d frame%s  %5.1f KB" % (name, len(frames), " " if len(frames) == 1 else "s", os.path.getsize(path) / 1024))
+        file.write(svg(frames, max(used, 40), times))
+    seconds = " %4.1fs" % sum(times) if times else ""
+    print("%-12s %2d frame%s %6.1f KB%s" % (name, len(frames), " " if len(frames) == 1 else "s", os.path.getsize(path) / 1024, seconds))
 
 
 def main():
