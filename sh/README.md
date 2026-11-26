@@ -249,13 +249,7 @@ cli_task_fail Messages "database is locked"             # shown next to the task
 cli_tasks_done || cli_die "The backup is not complete"
 ```
 
-```
-✓ Scan      0.8s
-⠹ Photos    ████████████░░░░░░░░░░░░  50%  60/120
-· Messages
-· Verify
-  Backup    ████████░░░░░░░░░░░░░░░░  40%  1/4 12s
-```
+![A job in four stages under one total](../docs/img/tasks.svg)
 
 Update several tasks in turn and they move side by side. For work that really runs at the same
 time, let each background job write `CURRENT TOTAL` to a file, and report from the main script:
@@ -307,15 +301,7 @@ dir=$(cli_browse -d "Restore to")                                      # a direc
 item=$(cli_browse -l "Restore what" "Photos/2024/a.jpg | 2 MB" "Notes/todo.txt | 4 KB")
 ```
 
-```
-? Open which file  ↑/↓ move, → open, ← close, enter select, . hidden files
-  Documents/
-❯ ├── Projects/
-  │   ├── cli/
-  │   ╰── notes.md
-  ├── Taxes/
-  ╰── todo.txt
-```
+![The file browser with a directory open and the cursor inside it](../docs/img/browse.svg)
 
 Right opens a directory and left closes it; left on the top directory shows the one above it, so
 you can walk anywhere. Enter picks a file (or opens and closes a directory), `.` shows hidden

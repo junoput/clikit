@@ -2,6 +2,8 @@
 
 Command-line output that adapts to whoever is reading it, for more than one language.
 
+![A backup in four stages, each with its own bar, under one bar for the whole](docs/img/tasks.svg)
+
 | Reader | Gets |
 |---|---|
 | a person at a terminal | colours, symbols, progress bars, spinners, timelines, trees, arrow-key menus, a file browser |
@@ -16,6 +18,41 @@ rich                                      plain                 agent
 ❯ staging                                 choice [staging]:     Deploy to: staging
   production
 ```
+
+## What it looks like
+
+At a terminal. Every picture is drawn by [`docs/render.py`](docs/render.py) from what the code
+prints, so it shows the real thing; the Rust crate prints the same bytes.
+
+Status lines, numbered steps, a spinner's result, a progress bar:
+
+![Steps, ticks, a warning, an error and a progress bar](docs/img/messages.svg)
+
+Tasks that run at the same time, under one total:
+
+![Three bars side by side, one of them failed, over the bar of the total](docs/img/stack.svg)
+
+Tables, key-value lines, boxes:
+
+![A table with right-aligned numbers, two key-value lines and a box](docs/img/layout.svg)
+
+Timelines: events on tracks along a time axis, or one row per event:
+
+![Three devices' backups over three years, across and as a list](docs/img/timeline.svg)
+
+Trees of paths or files, and a browser to walk through them:
+
+![A tree of files with their sizes](docs/img/tree.svg)
+
+![The file browser with a directory open and the cursor inside it](docs/img/browse.svg)
+
+Questions: menus, yes or no, several choices:
+
+![An answered menu, a confirmation and a list with two options ticked](docs/img/prompts.svg)
+
+Help pages, written from the commands and options a program declares:
+
+![The help page of a small todo program](docs/img/help.svg)
 
 ## Implementations
 
@@ -43,6 +80,7 @@ Add `all` to run everything, `mock` for a pretend release that uses most feature
 sh/test/all.sh                              # shell: unit tests and conformance, in every shell found
 cd rust && cargo test --all-features        # Rust: conformance, clap integration, API, doc tests
 python3 conformance/terminal.py             # both, in a real terminal: Ctrl-C leaves it as it was
+python3 docs/render.py                      # draw the pictures above again, from the shell implementation
 ```
 
 ## Adding a language

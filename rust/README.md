@@ -140,14 +140,7 @@ let file = clikit::browse("Open which file", ".")?;                // -> PathBuf
 let part = clikit::Browse::new().ask_rows("Restore what", &[["Photos/a.jpg", "2 MB"], ["Notes/todo.txt", "4 KB"]])?;
 ```
 
-```
-? Open which file  ↑/↓ move, → open, ← close, enter select, . hidden files
-  ./
-❯ ├── src/
-  │   ├── lib.rs
-  │   ╰── main.rs
-  ╰── Cargo.toml
-```
+![The file browser with a directory open and the cursor inside it](../docs/img/browse.svg)
 
 Right opens a directory and left closes it; left on the top directory shows the one above it.
 Enter picks a file, `.` shows hidden files, Escape cancels. Without a terminal `browse` reads the
@@ -167,11 +160,7 @@ for (i, photo) in album.iter().enumerate() {
 if !backup.finish() { /* a task called fail(why) */ }
 ```
 
-```
-✓ Scan     0.8s
-⠹ Photos   ████████████░░░░░░░░░░░░  50%  60/120
-  Backup   ██████████░░░░░░░░░░░░░░  44%  1/2 12s
-```
+![A job in four stages under one total](../docs/img/tasks.svg)
 
 A `Task` is `Clone + Send`: give each thread its own and they are drawn side by side. A log gets
 one line per finished task and one each time the total passes a quarter; an agent gets the
