@@ -23,11 +23,21 @@ pub struct Candidate {
     /// What goes on the line, when that is not `text` as it is. Without it, on a command line,
     /// `text` goes in, in double quotes if it holds a space or a quote.
     pub insert: Option<String>,
+    /// Only part of a word: see [`Candidate::partial`].
+    pub partial: bool,
 }
 
 impl Candidate {
     pub fn new(text: impl Into<String>, about: impl Into<String>) -> Candidate {
-        Candidate { text: text.into(), about: about.into(), insert: None }
+        Candidate { text: text.into(), about: about.into(), insert: None, partial: false }
+    }
+
+    /// This is only the beginning of a word: a folder with more inside, `key=`, `user@`. When
+    /// it is taken, no space follows and a quote that was opened for it stays open, so the
+    /// person goes on typing right behind it and the next Tab completes inside.
+    pub fn partial(mut self) -> Candidate {
+        self.partial = true;
+        self
     }
 
     /// Put this on the line instead of the text that is shown.
@@ -313,14 +323,18 @@ pub(crate) fn edit(prompt: &str, kind: Kind, complete: &dyn Fn(&str) -> Completi
                 }
                 let picked = &candidates[current - 1];
                 left.truncate(word_at);
-                left.push_str(&match (&picked.insert, kind) {
+                let mut word = match (&picked.insert, kind) {
                     (Some(insert), _) => insert.clone(),
                     (None, Kind::Line) => quoted(&picked.text),
                     (None, Kind::Value) => picked.text.clone(),
-                });
+                };
+                if picked.partial && picked.insert.is_none() && word.starts_with('"') {
+                    word.pop(); // the quote stays open: there is more of this word to come
+                }
+                left.push_str(&word);
                 if candidates.len() == 1 {
                     // only one: take it
-                    if kind == Kind::Line {
+                    if kind == Kind::Line && !picked.partial {
                         left.push(' ');
                     }
                     current = 0;

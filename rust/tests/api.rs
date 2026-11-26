@@ -244,6 +244,29 @@ fn editor_completes_words_the_way_a_shell_splits_them() {
 }
 
 #[test]
+fn editor_goes_on_behind_a_candidate_that_is_part_of_a_word() {
+    use clikit::{Candidate, Completion};
+    const PATHS: [&str; 4] =
+        ["Library/", "Library/Application Support/", "Library/Application Support/Prefs", "notes.txt"];
+    // What is one level below what was typed; a folder is only part of the word.
+    let complete = |before: &str| -> Completion {
+        let typed = before.trim_start_matches("ls ").trim_start_matches('"');
+        PATHS
+            .iter()
+            .copied()
+            .filter(|path| path.starts_with(typed) && !path[typed.len()..].trim_end_matches('/').contains('/'))
+            .map(|path| if path.ends_with('/') { Candidate::from(path).partial() } else { Candidate::from(path) })
+            .collect::<Vec<_>>()
+            .into()
+    };
+    // Three Tabs walk down the path, with nothing to delete in between.
+    let (lines, err) = typed_lines("80", "ls Li\tAp\tP\t\n", complete);
+    assert_eq!(lines, ["ls \"Library/Application Support/Prefs\" "]);
+    assert!(err.contains("\r\x1b[J> ls Library/\r"), "no space behind a folder: {err:?}");
+    assert!(err.contains("\r\x1b[J> ls \"Library/Application Support/\r"), "and its quote stays open: {err:?}");
+}
+
+#[test]
 fn editor_scrolls_a_long_line_and_moves_by_words() {
     let none = |_: &str| clikit::Completion::default();
     // 40 characters in a terminal of 30: the end is on show, then (Ctrl-A) the start.

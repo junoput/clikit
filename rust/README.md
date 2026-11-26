@@ -256,7 +256,8 @@ fn main() {
   - The completer returns candidates for the word being typed, and a word is what a shell
     takes as one: `"Annual re` is one word, and the candidate `Annual report` goes in as
     `"Annual report"`. `Candidate::new(text, about).insert(other)` puts something else on the
-    line than it shows; `Completion::at(from, candidates)` says itself which part of the line
+    line than it shows; `.partial()` marks a candidate that is only the beginning of a word (a
+    folder, `key=`): no space follows it, and the next Tab completes behind it; `Completion::at(from, candidates)` says itself which part of the line
     is replaced, and then nothing is filtered.
   - Candidates that come with a few words about them are shown as a list, one per line;
     without, in a row.
