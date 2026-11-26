@@ -383,6 +383,7 @@ the end of the line), the line is printed, and the drawing is repeated as it was
 | Left, Right, Home, End (also Ctrl-A, Ctrl-E) | move the cursor |
 | Backspace, Delete | remove the character before, under the cursor |
 | Ctrl-U, Ctrl-K, Ctrl-W | remove everything before the cursor, after it, the word before it |
+| Ctrl-C | at an interactive prompt: drop the line (it is shown once more with `^C` after it) and start a new one; on an empty line, leave the prompt. In a question (`input`): end the program |
 | Tab, Shift-Tab | step forwards, backwards through the candidates |
 | Up, Down | earlier and later lines (the interactive prompt only) |
 | Enter | accept |

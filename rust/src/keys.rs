@@ -25,6 +25,8 @@ pub(crate) enum Key {
     KillWord,
     /// Ctrl-D.
     Eof,
+    /// Ctrl-C, for a reader that asked to be told instead of having the program end.
+    Interrupt,
     /// A key we have no use for, such as Page Up.
     Other,
     Char(char),
@@ -37,6 +39,8 @@ pub(crate) enum Key {
 pub(crate) struct Keys {
     saved: Option<String>,
     unread: Option<u8>,
+    /// Ctrl-C is handed over as [`Key::Interrupt`]; otherwise it ends the program.
+    interrupts: bool,
 }
 
 fn stty(args: &[&str]) {
@@ -44,9 +48,16 @@ fn stty(args: &[&str]) {
 }
 
 impl Keys {
+    /// Like [`Keys::open`], but Ctrl-C is a key: a command prompt clears its line with it.
+    pub fn open_with_interrupts() -> Keys {
+        let mut keys = Keys::open();
+        keys.interrupts = true;
+        keys
+    }
+
     pub fn open() -> Keys {
         if !ctx::stdin_tty() {
-            return Keys { saved: None, unread: None };
+            return Keys { saved: None, unread: None, interrupts: false };
         }
         let saved = Command::new("stty")
             .arg("-g")
@@ -61,7 +72,7 @@ impl Keys {
             // terminal before leaving. A read returns after 0.1s if nothing was typed.
             stty(&["-icanon", "-echo", "-isig", "min", "0", "time", "1"]);
         }
-        Keys { saved, unread: None }
+        Keys { saved, unread: None, interrupts: false }
     }
 
     fn restore(&mut self) {
@@ -93,6 +104,7 @@ impl Keys {
     pub fn next(&mut self) -> Key {
         let Some(first) = self.byte(true) else { return Key::EndOfInput };
         match first {
+            0x03 if self.interrupts => Key::Interrupt,
             0x03 if self.raw() => {
                 self.restore();
                 ctx::err("\n");

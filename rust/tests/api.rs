@@ -176,6 +176,35 @@ fn each_stream_has_its_own_mode() {
 }
 
 #[test]
+fn editor_completes_with_descriptions_and_keeps_its_history() {
+    use clikit::{Candidate, Editor, Read};
+    let file = std::env::temp_dir().join(format!("clikit-history-{}", std::process::id()));
+    let _ = std::fs::remove_file(&file);
+    let keys = "op\t\t\nclose\n\x1b[A\x1b[A\n   \n\x03";
+    let run = Session::new(Mode::Rich).env("CLI_INTERACTIVE", "1").env("NO_COLOR", "1").stdin(keys).run(|| {
+        let mut editor = Editor::new()
+            .history_file(&file)
+            .completer(|_| vec![Candidate::new("opal", "A stone"), ("open", "Open a file").into(), "close".into()]);
+        assert_eq!(editor.read("> "), Read::Line("open".into()), "Tab twice: the second candidate that fits");
+        assert_eq!(editor.read("> "), Read::Line("close".into()));
+        assert_eq!(editor.read("> "), Read::Line("open".into()), "Up twice: the line before the last");
+        assert_eq!(editor.read("> "), Read::Line("   ".into()), "a blank line is a line, and not history");
+        assert_eq!(editor.read("> "), Read::Interrupted, "Ctrl-C on an empty line");
+        assert_eq!(editor.history(), ["open", "close", "open"]);
+    });
+    assert!(run.err.contains("A stone") && run.err.contains("Open a file"), "{:?}", run.err);
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "open\nclose\nopen\n");
+    // The next run of the program has the history.
+    assert_eq!(Editor::new().history_file(&file).history(), ["open", "close", "open"]);
+    // Without keys it reads lines.
+    Session::new(Mode::Plain).stdin("one\n").run(|| {
+        let mut editor = Editor::new();
+        assert_eq!((editor.read("> "), editor.read("> ")), (Read::Line("one".into()), Read::End));
+    });
+    std::fs::remove_file(&file).unwrap();
+}
+
+#[test]
 fn tasks_on_threads() {
     let run = capture(Mode::Agent, || {
         let job = clikit::Tasks::new("Job");

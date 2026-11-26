@@ -160,11 +160,11 @@ pub fn input_with<S: AsRef<str>>(
     if keys_available() {
         let shown = if default.is_empty() { String::new() } else { format!(" {}({default}){}", t.c(DIM), t.c(RESET)) };
         let prompt = format!("{}?{} {question}{shown} ", t.c(CYAN), t.c(RESET));
-        let complete = |_: &str| suggestions.iter().map(|s| s.as_ref().to_string()).collect();
+        let complete = |_: &str| suggestions.iter().map(|s| s.as_ref().into()).collect();
         match edit(&prompt, Kind::Value, &complete, &[]) {
             Edited::Cancelled => return Err(PromptError::Cancelled),
             Edited::Text(text) => (answer, answered) = (text, true),
-            Edited::End => (answer, answered) = (String::new(), false),
+            Edited::End | Edited::Interrupted => (answer, answered) = (String::new(), false),
         }
     } else {
         if t.mode != Mode::Agent {

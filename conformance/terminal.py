@@ -39,8 +39,9 @@ time.sleep(1.5)
 """
 
 
-def interrupted(argv, keys=b""):
-    """Start argv, type keys, press Ctrl-C. Returns (terminal is normal, how the program ended)."""
+def interrupted(argv, keys=b"", presses=1):
+    """Start argv, type keys, press Ctrl-C (`presses` times). Returns (terminal is normal, how the
+    program ended, the program was still running before the last press)."""
     env = {name: os.environ[name] for name in ("PATH", "HOME", "TMPDIR") if name in os.environ}
     env.update({"TERM": "xterm-256color", "LANG": "en_US.UTF-8", "CLI_AGENT": "0", "TODO_FILE": os.devnull})
     pid, fd = pty.fork()
@@ -62,8 +63,11 @@ def interrupted(argv, keys=b""):
     if keys:
         os.write(fd, keys)
         wait(0.4)
-    os.write(fd, b"\x03")
-    wait(0.8)
+    survived = True
+    for press in range(presses):
+        survived = b"STATUS=" not in seen
+        os.write(fd, b"\x03")
+        wait(0.8 if presses == 1 else 1.4)  # bash 3.2 looks for Ctrl-C once a second
     flags = termios.tcgetattr(fd)[3]
     normal = all(flags & flag for flag in (termios.ICANON, termios.ECHO, termios.ISIG))
     status = re.search(rb"STATUS=(-?[0-9]+)", seen)
@@ -73,9 +77,9 @@ def interrupted(argv, keys=b""):
     except OSError:
         pass
     if not status:
-        return normal, "still running"
+        return normal, "still running", survived
     code = int(status.group(1))
-    return normal, "killed by signal %d" % -code if code < 0 else "exit %d" % code
+    return normal, "killed by signal %d" % -code if code < 0 else "exit %d" % code, survived
 
 
 def typed_in_secret(command):
@@ -152,22 +156,24 @@ def main():
     for shell in sorted(set(shells)):
         for call, keys in prompts:
             runs.append(("%s: %s" % (shell, call[0]), [shell, CLI] + call, keys))
-        runs.append(("%s: interactive mode" % shell, [shell, TODO, "-i"], b"li"))
+        # At a command prompt Ctrl-C drops the line; a second one, on the empty line, leaves.
+        runs.append(("%s: interactive mode" % shell, [shell, TODO, "-i"], b"li", 2))
     if os.path.exists(RUST_DEMO):
         runs.append(("rust: menu", [RUST_DEMO], b"\x1b[B"))
         runs.append(("rust: wizard", [RUST_DEMO, "prompts"], b"An"))
         runs.append(("rust: browse", [RUST_DEMO, "tree"], b"\x1b[B\x1b[C"))
-        runs.append(("rust: interactive mode", [RUST_DEMO, "interactive"], b"li"))
+        runs.append(("rust: interactive mode", [RUST_DEMO, "interactive"], b"li", 2))
     else:
         print("(the Rust demo is not built; skipping it)")
 
     failed = 0
-    for name, argv, keys in runs:
-        normal, ended = interrupted(argv, keys)
-        good = normal and ended != "still running"
+    for name, argv, keys, *presses in runs:
+        normal, ended, survived = interrupted(argv, keys, *presses)
+        good = normal and ended != "still running" and survived
         failed += not good
         if not good:
-            print("FAIL %s: terminal %s, program %s" % (name, "normal" if normal else "left without echo", ended))
+            print("FAIL %s: terminal %s, program %s%s" % (name, "normal" if normal else "left without echo", ended,
+                                                          "" if survived else ", and it ended at the first Ctrl-C"))
     print("%d prompts interrupted, %d left the terminal broken or kept running" % (len(runs), failed))
 
     # A password is hidden when the output is a pipe too: it must appear once, where `cat` prints it.

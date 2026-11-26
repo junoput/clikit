@@ -242,8 +242,17 @@ fn main() {
 - In agent mode, `--help` prints every command and option in one compact page (`agent_help`),
   and an error is one line, for example `error: unknown command 'lst'; commands: add list`.
 - `clikit::clap::interactive::<Todo>(run)` is a prompt that runs the application's commands until
-  `exit`. Tab and Shift-Tab step through the commands, and after a command through its options;
-  up and down recall earlier lines; an empty line opens a menu of the commands.
+  `exit`. Tab and Shift-Tab step through the commands, and after a command through its options
+  or the commands inside it; up and down recall earlier lines; an empty line opens a menu of the
+  commands; Ctrl-C drops the line, and on an empty line leaves the prompt.
+- `clikit::clap::Shell` is that prompt with parts of your own: `.prompt(|| ...)` asked anew for
+  every line, `.history_file(path)`, `.complete(|before| ...)` for more candidates (each with a
+  few words about it), and `.before(|line| ...)`, which sees every line first and returns
+  `Line::Done` (dealt with, or not to be run) or `Line::Run(line)` (this line, or another in
+  its place).
+- `clikit::Editor` is the line editor alone, for a prompt that has nothing to do with clap:
+  `Editor::new().history_file(path).completer(|before| ...)`, then `editor.read("> ")` gives
+  `Read::Line(text)`, `Read::Interrupted` (Ctrl-C on an empty line) or `Read::End`.
 - A mode forced by a flag is passed on to programs started with `exec` and `spin_command`, as
   `CLI_MODE`.
 

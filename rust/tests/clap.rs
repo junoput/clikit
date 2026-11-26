@@ -196,6 +196,70 @@ fn interactive_mode_flags_last_one_line() {
 }
 
 #[test]
+fn interactive_ctrl_c_drops_the_line() {
+    // A line with text is dropped and the prompt goes on; on an empty line the prompt ends.
+    let (seen, err) = typed("add milk\x03list\n\x03add later\n");
+    assert_eq!(seen, [Action::List { all: false }]);
+    assert!(err.contains("add milk^C\n"), "{err:?}");
+}
+
+/// A program with commands inside commands, and a prompt of its own.
+#[derive(Parser, Debug, PartialEq)]
+#[command(name = "box")]
+enum Nested {
+    /// Other places
+    Remote {
+        #[command(subcommand)]
+        action: Remote,
+    },
+    /// Show everything
+    List,
+}
+
+#[derive(Subcommand, Debug, PartialEq)]
+enum Remote {
+    /// Add a place
+    Add {
+        name: String,
+        /// Read only
+        #[arg(long)]
+        mirror: bool,
+    },
+    /// Forget a place
+    Remove { name: String },
+}
+
+#[test]
+fn shell_with_a_prompt_a_first_look_and_completion_of_its_own() {
+    use clikit::clap::{Line, Shell};
+    let (mut seen, mut looked) = (Vec::new(), Vec::new());
+    let place = std::cell::RefCell::new(String::from("/"));
+    let keys = "re\ta\tx --m\t\ncd photos\nls\nop\t\n";
+    let run = Session::new(Mode::Rich).env("CLI_INTERACTIVE", "1").env("NO_COLOR", "1").stdin(keys).run(|| {
+        Shell::<Nested>::new()
+            .prompt(|| format!("box {}> ", place.borrow()))
+            .complete(|_| vec![clikit::Candidate::new("open", "Open a place")])
+            .before(|line| {
+                looked.push(line.to_string());
+                match line {
+                    "ls" => Line::Run("list".to_string()),
+                    _ if line.starts_with("cd ") => {
+                        *place.borrow_mut() = line[3..].to_string();
+                        Line::Done
+                    }
+                    _ => Line::Run(line.to_string()),
+                }
+            })
+            .run(|command| seen.push(command));
+    });
+    // Tab went from `re` to `remote `, then into the commands inside it, then to its option.
+    assert_eq!(seen[0], Nested::Remote { action: Remote::Add { name: "x".into(), mirror: true } });
+    assert_eq!(seen[1], Nested::List, "the line `ls` was run as `list`");
+    assert_eq!(looked, ["remote add x --mirror", "cd photos", "ls", "open"]);
+    assert!(run.err.contains("box /> ") && run.err.contains("box photos> "), "the prompt is asked anew: {:?}", run.err);
+}
+
+#[test]
 fn interactive_history() {
     let add = |text: &str| Action::Add { text: text.into(), priority: 2 };
     assert_eq!(typed("add a\n\x1b[A\nexit\n").0, [add("a"), add("a")]);

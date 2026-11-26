@@ -389,7 +389,7 @@ cli_run "$@"
 - `--version`, `--agent`, `--plain`, `--no-color`, before the command name.
 - `todo -i`: interactive mode. Type commands at a prompt. Tab and Shift-Tab step through the
   commands, and after a command through its options; up and down recall earlier lines; Enter on an
-  empty line opens a menu. Piped input works too: `printf 'add x\nlist\n' | todo -i`.
+  empty line opens a menu; Ctrl-C drops the line, and on an empty line leaves the prompt. Piped input works too: `printf 'add x\nlist\n' | todo -i`.
 
 A command that declares no options, in an app with no global options, receives its arguments
 untouched, so it can do its own parsing.

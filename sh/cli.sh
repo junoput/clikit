@@ -36,7 +36,7 @@ _CLI_R='' _CLI_KEY=''
 _CLI_APP=${0##*/} _CLI_APP_DESC='' _CLI_APP_VER=''
 _CLI_CMDS='' _CLI_OPTS='' _CLI_SYN='' _CLI_EX='' _CLI_CUR=@app
 _CLI_STEP_I=0 _CLI_STEP_N=0 _CLI_P_T0=''
-_CLI_SPLIT='' _CLI_MODE_OUT=plain _CLI_MODE_ERR=plain
+_CLI_KEY_INT='' _CLI_GOT_INT='' _CLI_INT_TEXT='' _CLI_SPLIT='' _CLI_MODE_OUT=plain _CLI_MODE_ERR=plain
 _CLI_W='' _CLI_W_AT='' _CLI_LIVE_CLEAR='' _CLI_LIVE_TEXT='' _CLI_K_AT=0
 _CLI_K_T0='' _CLI_K_TITLE='' _CLI_K_N=0 _CLI_K_DRAWN=0 _CLI_K_FRAME=0 _CLI_K_Q=0 _CLI_K_DONE=0 _CLI_K_FAILED=0
 _CLI_HIST='' _CLI_HIST_N=0 _CLI_EDIT_LIST='' _CLI_STTY='' _CLI_TRAP='' _CLI_UNREAD=''
@@ -1704,7 +1704,20 @@ _cli_getc() {  # [SECONDS]   one character → $_CLI_C; fails at the end of inpu
     if [ -t 0 ]; then IFS= read -rsk1 ${1:+-t} ${1:+"$1"} _CLI_C || return 1
     else IFS= read -u0 -rk1 ${1:+-t} ${1:+"$1"} _CLI_C || return 1; fi
   else
-    IFS= read -rsn1 ${1:+-t} ${1:+"$1"} _CLI_C || return 1
+    if [ $# -eq 0 ] && [ -n "$_CLI_KEY_INT" ] && [ -n "$_CLI_STTY" ]; then
+      # A command line at a terminal: Ctrl-C is a signal that bash delivers only once `read`
+      # has returned, so read in short waits and look in between.
+      while ! IFS= read -rsn1 -t "$_CLI_ESC_WAIT" _CLI_C; do
+        if [ -n "$_CLI_GOT_INT" ]; then _CLI_GOT_INT=''; _CLI_C=$'\003'; return 0; fi
+      done
+      if [ -n "$_CLI_GOT_INT" ]; then  # Ctrl-C came with keys still on their way: they go with the line
+        _CLI_GOT_INT='' _CLI_INT_TEXT=1
+        while IFS= read -rsn1 -t "$_CLI_ESC_WAIT" _CLI_C; do :; done
+        _CLI_C=$'\003'; return 0
+      fi
+    else
+      IFS= read -rsn1 ${1:+-t} ${1:+"$1"} _CLI_C || return 1
+    fi
     if [ -z "$_CLI_C" ]; then
       _CLI_C=$_CLI_NL  # bash hands back an empty string for Enter
     elif [ "${BASH_VERSINFO[0]:-3}" -lt 4 ]; then
@@ -1756,7 +1769,10 @@ _cli_key() {  # one keypress → $_CLI_KEY: the character, or a name (up, enter,
     $'\025') _CLI_KEY=kill-left;;
     $'\013') _CLI_KEY=kill-right;;
     $'\027') _CLI_KEY=kill-word;;
-    $'\003') if [ -n "$_CLI_STTY" ]; then _cli_interrupted; return 1; fi; _CLI_KEY=other;;
+    $'\003') # Ctrl-C: a command line asks to be told; anywhere else it ends the program
+            if [ -n "$_CLI_KEY_INT" ]; then _CLI_KEY=interrupt
+            elif [ -n "$_CLI_STTY" ]; then _cli_interrupted; return 1
+            else _CLI_KEY=other; fi;;
     $'\004') _CLI_KEY=eof;;
     *) _CLI_KEY=$_CLI_C;;
   esac
@@ -1775,7 +1791,15 @@ _cli_raw_on() {
     stty -echo -icanon -isig min 1 time 0 2>/dev/null || true
   else
     _CLI_TRAP=$(trap -p INT)
-    trap _cli_interrupted INT
+    if [ -n "$_CLI_KEY_INT" ]; then
+      # On a command line Ctrl-C drops the line: note the signal, and keep the terminal out of
+      # line mode for the whole time, so that nothing typed between two reads is lost.
+      _CLI_GOT_INT=''
+      trap '_CLI_GOT_INT=1' INT
+      stty -echo -icanon noflsh min 1 time 0 2>/dev/null || true  # noflsh: Ctrl-C does not eat typed keys
+    else
+      trap _cli_interrupted INT
+    fi
   fi
 }
 
@@ -1919,6 +1943,13 @@ _cli_edit() {  # PROMPT line|value   a one-line editor → $_CLI_R. Status 1: en
           done <<<"$_CLI_HIST"
         fi;;
       eof) if [ -z "$left$right" ]; then _cli_raw_off; printf '\n' >&2; return 1; fi;;
+      interrupt)  # Ctrl-C: a line with something on it is dropped; an empty one says "enough"
+        if [ -z "$left$right$_CLI_INT_TEXT" ]; then
+          _cli_raw_off; printf '\r\033[J%s^C\n' "$ps" >&2
+          return 4
+        fi
+        printf '\r\033[J%s%s%s^C\n' "$ps" "$left" "$right" >&2
+        left='' right='' hi=0 _CLI_INT_TEXT='';;
       space) left="$left ";;
       ?) case $key in [[:cntrl:]]) ;; *) left="$left$key";; esac;;
     esac
@@ -2649,7 +2680,8 @@ cli_interactive() {  # cli_interactive   a prompt that runs the app's commands u
   fi
   while :; do
     if _cli_tty; then
-      _cli_edit "$ps" line || break
+      _CLI_KEY_INT=1; _cli_edit "$ps" line || { _CLI_KEY_INT=''; break; }
+      _CLI_KEY_INT=''
       line=$_CLI_R
       case $line in *[![:space:]]*) _CLI_HIST="$_CLI_HIST$line$_CLI_NL"; _CLI_HIST_N=$((_CLI_HIST_N + 1));; esac
     else

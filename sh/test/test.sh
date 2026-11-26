@@ -397,6 +397,9 @@ check "repl: up recalls the last line" "list 1${NL}list 1" "$(printf 'list a\n\0
 check "repl: up up down" "list 1${NL}list 2${NL}list 2" "$(printf 'list a\nlist a b\n\033[A\033[A\033[B\nexit\n' | cli_run -i 2>/dev/null)"
 check "repl: down brings the draft back" "list 1${NL}list 3" "$(printf 'list a\nlist x y z\033[A\033[B\nexit\n' | cli_run -i 2>/dev/null)"
 check "repl: the menu row shows the candidates" "add  list  raw-args  fail  help  exit" "$(printf '\t\nexit\n' | cli_run -i 2>&1 >/dev/null | strip | tr '\r' '\n' | sed -n 's/  *$//; /^add  /p' | head -1)"
+check "repl: Ctrl-C drops the line and goes on" "list 0" "$(printf 'add milk\003list\n\003' | cli_run -i 2>/dev/null)"
+check "repl: Ctrl-C on an empty line leaves" "" "$(printf '\003list\n' | cli_run -i 2>/dev/null)"
+has "repl: the dropped line is shown with ^C" "add milk^C" "$(printf 'add milk\003\003' | cli_run -i 2>&1 >/dev/null | strip)"
 check "repl: end of input leaves" "list 0" "$(printf 'list\n' | cli_run -i 2>/dev/null)"
 unset CLI_INTERACTIVE
 cli_mode plain
