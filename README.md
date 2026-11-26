@@ -62,7 +62,7 @@ Help pages, written from the commands and options a program declares:
 | Rust (1.75+) | [`rust/`](rust/README.md) | programs, with or without clap | a git dependency on this repository |
 
 Both print the same bytes for the same call. [`SPEC.md`](SPEC.md) is the contract, and
-[`conformance/cases.txt`](conformance/cases.txt) holds 401 cases that both test suites run.
+[`conformance/cases.txt`](conformance/cases.txt) holds 410 cases that both test suites run.
 
 ## Try it
 

@@ -4,11 +4,11 @@ use std::fmt::Display;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use crate::ctx::{self, Live, Mode, BOLD, CYAN, DIM, GREEN, RED, RESET};
+use crate::ctx::{self, Live, Mode, BOLD, CYAN, DIM, GREEN, RED, RESET, YELLOW};
 use crate::layout::fit;
 use crate::msg::{msg, Level};
-use crate::text::len;
-use crate::time::since;
+use crate::text::{len, size, truncate};
+use crate::time::duration;
 
 const BAR_WIDTH: isize = 24;
 /// At a terminal, a task that only moved on is not drawn more often than this.
@@ -30,6 +30,32 @@ enum State {
     Failed,
 }
 
+/// A moment something started: when it was noted, and how long before that it had begun.
+#[derive(Clone, Copy)]
+struct Clock {
+    at: Instant,
+    before: Duration,
+}
+
+impl Clock {
+    fn started(before: Duration) -> Clock {
+        Clock { at: Instant::now(), before }
+    }
+
+    fn ms(&self) -> u64 {
+        (self.at.elapsed() + self.before).as_millis() as u64
+    }
+}
+
+/// What a running task shows after its bar.
+#[derive(Clone, Copy, Default)]
+struct Show {
+    bytes: bool,
+    percent: bool,
+    rate: bool,
+    eta: bool,
+}
+
 struct Item {
     name: String,
     weight: u64,
@@ -37,14 +63,18 @@ struct Item {
     current: u64,
     /// 0 when the task is not counted.
     total: u64,
-    start: Option<Instant>,
+    start: Option<Clock>,
+    /// How long before it was first reported the task began, if that is known.
+    ago: Duration,
     /// How long it took, or why it failed.
     text: String,
+    show: Show,
+    note: String,
 }
 
 struct Group {
     title: String,
-    start: Instant,
+    start: Clock,
     items: Vec<Item>,
     /// The lines on the screen that the next drawing replaces.
     drawn: usize,
@@ -66,26 +96,29 @@ impl Group {
         let started = item.state == State::Waiting;
         match item.state {
             State::Done | State::Failed => return, // what has ended stays ended
-            State::Waiting => (item.start, item.state) = (Some(Instant::now()), State::Running),
+            State::Waiting => (item.start, item.state) = (Some(Clock::started(item.ago)), State::Running),
             State::Running => {}
         }
         item.current = if total > 0 { current.min(total) } else { current };
         item.total = total;
         if total > 0 && current >= total {
-            self.end(id, State::Done, "");
+            self.end(id, State::Done, "", None);
         } else {
             self.draw(if started { Draw::Now } else { Draw::Soon });
         }
     }
 
-    fn end(&mut self, id: usize, state: State, why: &str) {
+    fn end(&mut self, id: usize, state: State, why: &str, took: Option<Duration>) {
         let mode = ctx::theme().mode;
         self.used = true;
         let item = &mut self.items[id];
         if matches!(item.state, State::Done | State::Failed) {
             return;
         }
-        let took = since(item.start.unwrap_or_else(Instant::now));
+        let took = match took {
+            Some(took) => duration(took.as_millis() as u64),
+            None => duration(item.start.map_or(0, |start| start.ms())),
+        };
         item.state = state;
         if state == State::Done {
             if mode == Mode::Plain {
@@ -122,7 +155,18 @@ impl Group {
             weight += item.weight;
             sum += item.weight * points;
             name_width = name_width.max(len(&item.name));
-            count_width = count_width.max(item.total.to_string().len() * 2 + 1);
+            // Room after the bar for what the task shows, so that the bars keep their length
+            // while it changes.
+            let mut room = match item.show {
+                Show { percent: true, .. } => 0,
+                Show { bytes: true, .. } => 10 + len(&size(item.total)),
+                _ => item.total.to_string().len() * 2 + 1,
+            };
+            if item.state == State::Running {
+                room += if item.show.rate { 13 } else { 0 } + if item.show.eta { 13 } else { 0 };
+                room += if item.note.is_empty() { 0 } else { 2 + len(&item.note) };
+            }
+            count_width = count_width.max(room);
         }
         let weight = weight.max(1);
         let percent = sum / (weight * 10);
@@ -157,7 +201,12 @@ impl Group {
         let (cyan, bold, dim, green, red, reset) = (t.c(CYAN), t.c(BOLD), t.c(DIM), t.c(GREEN), t.c(RED), t.c(RESET));
         let ellipsis = t.g("…", "~");
         let frames: Vec<char> = t.g("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏", "|/-\\").chars().collect();
-        let frame = if end { t.g("·", ".").to_string() } else { frames[self.frame % frames.len()].to_string() };
+        // A task still running when the group ends was stopped, and says so.
+        let lead = if end {
+            format!("{}{}{reset}", t.c(YELLOW), t.g("■", "="))
+        } else {
+            format!("{cyan}{}{reset}", frames[self.frame % frames.len()])
+        };
         self.frame += 1;
         let bar = |fill: u64| {
             let fill = fill as usize;
@@ -180,15 +229,58 @@ impl Group {
                     let why = if item.text.is_empty() { "failed" } else { &item.text };
                     format!("{red}{}{reset} {name}  {dim}{why}{reset}", t.g("✗", "x"))
                 }
-                State::Running if item.total > 0 => {
-                    let (current, total) = (item.current, item.total);
-                    let percent = current * 100 / total;
-                    let bar = bar(current * bar_width as u64 / total);
-                    format!("{cyan}{frame}{reset} {name}  {bar} {percent:>3}%  {dim}{current}/{total}{reset}")
-                }
                 State::Running => {
-                    let running = since(item.start.unwrap_or_else(Instant::now));
-                    format!("{cyan}{frame}{reset} {name}  {dim}{running}{reset}")
+                    let (current, total, show) = (item.current, item.total, item.show);
+                    let elapsed = item.start.map_or(0, |start| start.ms());
+                    let mut line = format!("{lead} {name}");
+                    let mut tail: Vec<String> = Vec::new();
+                    let room;
+                    // A task that is counted has a total to divide by.
+                    if let Some(filled) = (current * bar_width as u64).checked_div(total) {
+                        let bar = bar(filled);
+                        line.push_str(&format!("  {bar} {:>3}%", current * 100 / total));
+                        room = width as isize - name_width as isize - bar_width as isize - 12;
+                        match show {
+                            Show { percent: true, .. } => {}
+                            Show { bytes: true, .. } => tail.push(format!("{}/{}", size(current), size(total))),
+                            _ => tail.push(format!("{current}/{total}")),
+                        }
+                        // How fast, and how long still: from the average so far.
+                        if elapsed >= 1000 && current > 0 {
+                            if show.rate {
+                                let rate = current * 1000 / elapsed;
+                                let rate = match (show.bytes, rate < 10) {
+                                    (true, _) => size(rate),
+                                    (false, true) => {
+                                        let tenths = current * 10000 / elapsed;
+                                        format!("{}.{}", tenths / 10, tenths % 10)
+                                    }
+                                    (false, false) => rate.to_string(),
+                                };
+                                tail.push(format!("{rate}/s"));
+                            }
+                            if show.eta {
+                                let seconds = (total - current) * (elapsed / 1000) / current;
+                                let left = if seconds < 60 { format!("{seconds}s") } else { duration(seconds * 1000) };
+                                tail.push(format!("{left} left"));
+                            }
+                        }
+                    } else {
+                        tail.push(duration(elapsed));
+                        room = width as isize - name_width as isize - 5;
+                    }
+                    if !item.note.is_empty() {
+                        tail.push(item.note.clone());
+                    }
+                    let mut tail = tail.join("  ");
+                    let room = room.max(1) as usize;
+                    if len(&tail) > room {
+                        tail = format!("{}{ellipsis}", truncate(&tail, room - 1));
+                    }
+                    if !tail.is_empty() {
+                        line.push_str(&format!("  {dim}{tail}{reset}"));
+                    }
+                    line
                 }
             };
             out.push_str(&format!("{line}\x1b[K\n"));
@@ -201,7 +293,7 @@ impl Group {
             }
             let name = fit(title, name_width, 'l', ellipsis);
             let bar = bar(sum * bar_width as u64 / (weight * 1000));
-            let running = since(self.start);
+            let running = duration(self.start.ms());
             out.push_str(&format!(
                 "  {bold}{name}{reset}  {bar} {percent:>3}%  {dim}{done}/{n} {running}{reset}\x1b[K\n"
             ));
@@ -220,7 +312,7 @@ impl Group {
         }
         self.ended = true;
         self.draw(Draw::End);
-        let (title, done, n, took) = (&self.title, self.done, self.items.len(), since(self.start));
+        let (title, done, n, took) = (&self.title, self.done, self.items.len(), duration(self.start.ms()));
         if ctx::theme().mode == Mode::Agent {
             ctx::err(&format!("{title}: {done}/{n} {took}\n"));
         } else {
@@ -296,7 +388,7 @@ impl Tasks {
     pub fn new(title: impl Display) -> Tasks {
         let group = Group {
             title: title.to_string(),
-            start: Instant::now(),
+            start: Clock::started(Duration::ZERO),
             items: Vec::new(),
             drawn: 0,
             shown: None,
@@ -321,9 +413,18 @@ impl Tasks {
             current: 0,
             total: 0,
             start: None,
+            ago: Duration::ZERO,
             text: String::new(),
+            show: Show::default(),
+            note: String::new(),
         });
         Task { group: self.group.clone(), id: group.items.len() - 1 }
+    }
+
+    /// The group began `ago`: for joining work that is already running. The time shown for the
+    /// whole counts from then.
+    pub fn started(&self, ago: Duration) {
+        locked(&self.group).start = Clock::started(ago);
     }
 
     /// End the group: the block gives way to one line for the whole. False when a task failed.
@@ -352,11 +453,61 @@ impl Task {
 
     /// The task is done.
     pub fn done(&self) {
-        locked(&self.group).end(self.id, State::Done, "");
+        locked(&self.group).end(self.id, State::Done, "", None);
+    }
+
+    /// The task is done and took `took`: for a task that ended before anybody was watching.
+    pub fn done_in(&self, took: Duration) {
+        locked(&self.group).end(self.id, State::Done, "", Some(took));
     }
 
     /// The task failed; `why` is shown next to it. The total stays where it is.
     pub fn fail(&self, why: impl Display) {
-        locked(&self.group).end(self.id, State::Failed, &why.to_string());
+        locked(&self.group).end(self.id, State::Failed, &why.to_string(), None);
+    }
+
+    /// The task began `ago`. Its time, its rate and its time left count from then.
+    pub fn started(&self, ago: Duration) {
+        let mut group = locked(&self.group);
+        let item = &mut group.items[self.id];
+        item.ago = ago;
+        if item.state == State::Running {
+            item.start = Some(Clock::started(ago));
+        }
+    }
+
+    /// A few words shown next to the task while it runs: what it is doing right now. An empty
+    /// text takes them away.
+    pub fn note(&self, text: impl Display) {
+        let mut group = locked(&self.group);
+        group.items[self.id].note = text.to_string();
+        if group.items[self.id].state == State::Running {
+            group.draw(Draw::Soon);
+        }
+    }
+
+    /// Count in bytes: `28.0 GB/68.9 GB` instead of plain numbers.
+    pub fn bytes(self) -> Task {
+        self.show(|show| show.bytes = true)
+    }
+
+    /// Show the bar and the percentage only, for a task that knows no more than that.
+    pub fn percent(self) -> Task {
+        self.show(|show| show.percent = true)
+    }
+
+    /// Show how fast it goes: `11.2 MB/s` in bytes, otherwise `120/s`. The average so far.
+    pub fn rate(self) -> Task {
+        self.show(|show| show.rate = true)
+    }
+
+    /// Show how long it will still take at this rate: `1h 02m left`.
+    pub fn eta(self) -> Task {
+        self.show(|show| show.eta = true)
+    }
+
+    fn show(self, change: impl FnOnce(&mut Show)) -> Task {
+        change(&mut locked(&self.group).items[self.id].show);
+        self
     }
 }

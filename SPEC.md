@@ -244,7 +244,7 @@ The bar ends when `CURRENT` reaches `TOTAL`, or when it is ended early. An early
 
 #### Several tasks under one total
 
-`tasks TITLE [NAME|WEIGHT]...` names a group of tasks; nothing is shown yet. `task NAME CURRENT
+`tasks TITLE [NAME|WEIGHT|SHOW]...` names a group of tasks; nothing is shown yet. `task NAME CURRENT
 TOTAL` says how far a task is, `task NAME` that it is running without a count, `task_done NAME`
 and `task_fail NAME [TEXT]` how it ended, and `tasks_done` ends the group. A task is waiting,
 running, done or failed. Reaching `TOTAL` makes it done; what has ended stays ended. A name not
@@ -278,7 +278,7 @@ it stopped.
     fewer than 4.
   - With more tasks than `CLI_PAGE`, waiting and finished tasks are not listed: the running and
     failed ones are, then `N done, M waiting`, then the total.
-  - `tasks_done` draws the tasks once more without the total (a task still running gets `·`
+  - `tasks_done` draws the tasks once more without the total (a task still running gets `■`
     for a spinner), then `✓ TITLE (3/3, DURATION)`: `✗` when a task failed, `●` when some never
     finished.
 - plain: `[OK] NAME (DURATION)` when a task is done, `[ERROR] NAME: TEXT` (or `NAME failed`)
@@ -287,6 +287,34 @@ it stopped.
 - agent: `error: NAME: TEXT` when a task fails, and at the end `TITLE: 3/3 DURATION`.
 
 `tasks_done` has status 1 when a task failed. Naming a new group ends the one before.
+
+**What a running task shows** after its bar and percentage, dimmed, the parts two spaces apart.
+`SHOW` is a list of words:
+
+| Word | Shows |
+|---|---|
+| (none) | `CURRENT/TOTAL` |
+| `bytes` | the two as sizes: `27.9 GB/68.9 GB` |
+| `percent` | no numbers: the bar and the percentage are all the task knows |
+| `rate` | how fast: `11.2 MB/s` with `bytes`, otherwise `120/s`, or `0.5/s` below 10 |
+| `eta` | how long still: `1h 02m left`, `45s left` |
+
+- A size is in steps of 1024 with one decimal, rounded: `512 B`, `1.5 KB`, `27.9 GB`, up to `PB`
+  (`size BYTES` prints one).
+- Rate and time left come from the average since the task started: `CURRENT * 1000 / ms` per
+  second, and `(TOTAL - CURRENT) * seconds / CURRENT` seconds left, both rounded down. They
+  show once the task has run for a second and `CURRENT` is above 0.
+- `task_note NAME TEXT` puts a few words last on the line of a running task: what it is doing
+  right now. Without `TEXT` they go away. A task without a count shows its time, then the note.
+- Room is kept after the bars for the longest of these, so the bars keep their length while
+  the numbers change; on a narrow terminal the text is cut and ends in `…`.
+
+**Known times**, for joining work that is already running: `tasks -t SECONDS` says the group
+started that long ago, `task -t SECONDS NAME ...` the same for a task, and
+`task_done -t SECONDS NAME` that the task took that long.
+
+**Stopped.** A task still running when the group ends is drawn once more with `■` in yellow
+(`=` in ASCII) in place of the spinner.
 
 **Not too often.** At a terminal (standard error is one), a call that only moves a running task
 on redraws at most every 80 ms; a task that starts or ends is always drawn. Without a terminal
@@ -321,7 +349,8 @@ the end of the line), the line is printed, and the drawing is repeated as it was
 - `browse`: a tree to walk through; see below.
 - `confirm`: `? QUESTION [Y/n]`, then `y`, `n`, Escape (no) or Enter (the default, if there is one).
 - `input`: `? QUESTION (default)`, then a line typed in the editor described below. Escape cancels.
-- `password`: the same question; what is typed is not shown. It is asked this way whenever
+- `password`: the same question; what is typed is not shown. Echo is switched off before the
+  question is drawn and stays off until the answer is in. It is asked this way whenever
   standard input is a terminal, in plain mode too: in `tool export | tar x` the output is a
   pipe, and a person still types the password. Only agent mode never reads a terminal.
 

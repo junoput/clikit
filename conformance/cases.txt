@@ -3497,7 +3497,7 @@ $ tasks_done
 !· Verify\e[K
 !  Backup  ██████████░░░░░░░░░░░░░░  41%  1/3 <T>\e[K
 !\e[J\e[4A✓ Scan    <T>\e[K
-!· Photos  ██████░░░░░░░░░░░░░░░░░░  25%  1/4\e[K
+!■ Photos  ██████░░░░░░░░░░░░░░░░░░  25%  1/4\e[K
 !· Verify\e[K
 !\e[J● Backup (1/3, <T>)
 
@@ -3690,7 +3690,7 @@ $ tasks_done
 !  2 done, 1 waiting\e[K
 !  Files  ██████████░░░░░░░░░░░░░░  45%  2/5 <T>\e[K
 !\e[J\e[4A✗ c      no room\e[K
-!· d      ██████░░░░░░░░░░░░░░░░░░  25%  1/4\e[K
+!■ d      ██████░░░░░░░░░░░░░░░░░░  25%  1/4\e[K
 !\e[J✗ Files (2/5, <T>)
 = 1
 
@@ -3711,7 +3711,7 @@ $ tasks_done
 !\e[J\e[3A⠹ A task with a…  ██░░░  55%  5/9\e[K
 !✓ b               <T>\e[K
 !  A title that …  ███░░  77%  1/2 <T>\e[K
-!\e[J\e[3A· A task with a…  ██░░░  55%  5/9\e[K
+!\e[J\e[3A■ A task with a…  ██░░░  55%  5/9\e[K
 !✓ b               <T>\e[K
 !\e[J● A title that is rather long (1/2, <T>)
 
@@ -3830,7 +3830,7 @@ $ tasks_done
 !\e[J\e[2A\e[J\e[31m✗\e[0m No space left
 !\e[36m⠋\e[0m Scan    \e[32m████████████\e[0m\e[2m░░░░░░░░░░░░\e[0m  50%  \e[2m1/2\e[0m\e[K
 !  \e[1mBackup\e[0m  \e[32m████████████\e[0m\e[2m░░░░░░░░░░░░\e[0m  50%  \e[2m0/1 <T>\e[0m\e[K
-!\e[J\e[2A\e[36m·\e[0m Scan    \e[32m████████████\e[0m\e[2m░░░░░░░░░░░░\e[0m  50%  \e[2m1/2\e[0m\e[K
+!\e[J\e[2A\e[33m■\e[0m Scan    \e[32m████████████\e[0m\e[2m░░░░░░░░░░░░\e[0m  50%  \e[2m1/2\e[0m\e[K
 !\e[J\e[34m●\e[0m Backup (0/1, <T>)
 
 [rich] progress: a status line goes above the bar
@@ -3862,3 +3862,147 @@ $ width
 % COLUMNS=42
 $ width
 |42
+
+[plain] size
+$ size 0
+$ size 1023
+$ size 1024
+$ size 1536
+$ size 1048575
+$ size 30000000000
+$ size 73982582784
+$ size 1125899906842624
+$ size 900000000000000000
+|0 B
+|1023 B
+|1.0 KB
+|1.5 KB
+|1.0 MB
+|27.9 GB
+|68.9 GB
+|1.0 PB
+|799.4 PB
+
+[rich] tasks: bytes
+% NO_COLOR=1
+$ tasks Copy "Photos | 1 | bytes"
+$ task Photos 30000000000 74000000000
+$ tasks_done
+!⠋ Photos  █████████░░░░░░░░░░░░░░░  40%  27.9 GB/68.9 GB\e[K
+!  Copy    █████████░░░░░░░░░░░░░░░  40%  0/1 <T>\e[K
+!\e[J\e[2A■ Photos  █████████░░░░░░░░░░░░░░░  40%  27.9 GB/68.9 GB\e[K
+!\e[J● Copy (0/1, <T>)
+
+[rich] tasks: a percentage and nothing else
+% NO_COLOR=1
+$ tasks Sync "Phone | 1 | percent" "Files | 1"
+$ task Phone 37 100
+$ task Files 1 3
+$ tasks_done
+!⠋ Phone  ████████░░░░░░░░░░░░░░░░  37%\e[K
+!· Files\e[K
+!  Sync   ████░░░░░░░░░░░░░░░░░░░░  18%  0/2 <T>\e[K
+!\e[J\e[3A⠙ Phone  ████████░░░░░░░░░░░░░░░░  37%\e[K
+!⠙ Files  ████████░░░░░░░░░░░░░░░░  33%  1/3\e[K
+!  Sync   ████████░░░░░░░░░░░░░░░░  35%  0/2 <T>\e[K
+!\e[J\e[3A■ Phone  ████████░░░░░░░░░░░░░░░░  37%\e[K
+!■ Files  ████████░░░░░░░░░░░░░░░░  33%  1/3\e[K
+!\e[J● Sync (0/2, <T>)
+
+[rich] tasks: how fast and how long still, for work joined late
+% NO_COLOR=1
+$ tasks -t 1000 Copy "Photos | 1 | bytes rate eta" "Files | 1 | rate eta"
+$ task -t 1000 Photos 11744051200 35232153600
+$ task -t 1000 Files 520 2500
+$ task_done -t 842 Photos
+$ tasks_done
+!⠋ Photos  ██████░░░░░░░░░░░░░  33%  10.9 GB/32.8 GB  11.2 MB/s  33m <T> left\e[K
+!· Files\e[K
+!  Copy    ███░░░░░░░░░░░░░░░░  16%  0/2 16m <T>\e[K
+!\e[J\e[3A⠙ Photos  ██████░░░░░░░░░░░░░  33%  10.9 GB/32.8 GB  11.2 MB/s  33m <T> left\e[K
+!⠙ Files   ███░░░░░░░░░░░░░░░░  20%  520/2500  0.5/s  1h 03m left\e[K
+!  Copy    █████░░░░░░░░░░░░░░  27%  0/2 16m <T>\e[K
+!\e[J\e[3A✓ Photos  14m <T>\e[K
+!⠹ Files   ████░░░░░░░░░░░░░░░░░░░░  20%  520/2500  0.5/s  1h 03m left\e[K
+!  Copy    ██████████████░░░░░░░░░░  60%  1/2 16m <T>\e[K
+!\e[J\e[3A✓ Photos  14m <T>\e[K
+!■ Files   ████░░░░░░░░░░░░░░░░░░░░  20%  520/2500  0.5/s  1h 03m left\e[K
+!\e[J● Copy (1/2, 16m <T>)
+
+[rich] tasks: no rate in the first second
+% NO_COLOR=1
+$ tasks Copy "Files | 1 | rate eta"
+$ task Files 5 10
+$ tasks_done
+!⠋ Files  ████████████░░░░░░░░░░░░  50%  5/10\e[K
+!  Copy   ████████████░░░░░░░░░░░░  50%  0/1 <T>\e[K
+!\e[J\e[2A■ Files  ████████████░░░░░░░░░░░░  50%  5/10\e[K
+!\e[J● Copy (0/1, <T>)
+
+[rich] tasks: a note on a running task
+% NO_COLOR=1
+$ tasks Backup "Phone | 1 | percent" Scan
+$ task Phone 10 100
+$ task_note Phone preflight
+$ task Scan
+$ task_note Scan "reading the index"
+$ task_note Phone
+$ task_note Scan verifying
+$ tasks_done
+!⠋ Phone   ██░░░░░░░░░░░░░░░░░░░░░░  10%\e[K
+!· Scan\e[K
+!  Backup  █░░░░░░░░░░░░░░░░░░░░░░░   5%  0/2 <T>\e[K
+!\e[J\e[3A⠙ Phone   ██░░░░░░░░░░░░░░░░░░░░░░  10%  preflight\e[K
+!· Scan\e[K
+!  Backup  █░░░░░░░░░░░░░░░░░░░░░░░   5%  0/2 <T>\e[K
+!\e[J\e[3A⠹ Phone   ██░░░░░░░░░░░░░░░░░░░░░░  10%  preflight\e[K
+!⠹ Scan    <T>\e[K
+!  Backup  █░░░░░░░░░░░░░░░░░░░░░░░   5%  0/2 <T>\e[K
+!\e[J\e[3A⠸ Phone   ██░░░░░░░░░░░░░░░░░░░░░░  10%  preflight\e[K
+!⠸ Scan    <T>  reading the index\e[K
+!  Backup  █░░░░░░░░░░░░░░░░░░░░░░░   5%  0/2 <T>\e[K
+!\e[J\e[3A⠼ Phone   ██░░░░░░░░░░░░░░░░░░░░░░  10%\e[K
+!⠼ Scan    <T>  reading the index\e[K
+!  Backup  █░░░░░░░░░░░░░░░░░░░░░░░   5%  0/2 <T>\e[K
+!\e[J\e[3A⠴ Phone   ██░░░░░░░░░░░░░░░░░░░░░░  10%\e[K
+!⠴ Scan    <T>  verifying\e[K
+!  Backup  █░░░░░░░░░░░░░░░░░░░░░░░   5%  0/2 <T>\e[K
+!\e[J\e[3A■ Phone   ██░░░░░░░░░░░░░░░░░░░░░░  10%\e[K
+!■ Scan    <T>  verifying\e[K
+!\e[J● Backup (0/2, <T>)
+
+[rich] tasks: what a task shows is cut to the terminal
+% NO_COLOR=1
+% COLUMNS=44
+$ tasks Copy "Photos | 1 | bytes" Scan
+$ task Photos 30000000000 74000000000
+$ task_note Photos "a note that is far too long to fit"
+$ tasks_done
+!⠋ Photos  ███░░░░░░  40%  27.9 GB/68.9 GB\e[K
+!· Scan\e[K
+!  Copy    █░░░░░░░░  20%  0/2 <T>\e[K
+!\e[J\e[3A⠙ Photos  █░░░  40%  27.9 GB/68.9 GB  a no…\e[K
+!· Scan\e[K
+!  Copy    ░░░░  20%  0/2 <T>\e[K
+!\e[J\e[3A■ Photos  █░░░  40%  27.9 GB/68.9 GB  a no…\e[K
+!· Scan\e[K
+!\e[J● Copy (0/2, <T>)
+
+[plain] tasks: times that are known
+$ tasks -t 3600 Copy Photos Files
+$ task_done -t 842 Photos
+$ task -t 59 Files 1 2
+$ task_note Files "notes are for people at a terminal"
+$ task_done Files
+$ tasks_done
+![OK] Photos (14m <T>)
+!Copy: 50% (1/2)
+!Copy: 75% (1/2)
+![OK] Files (<T>)
+![OK] Copy (2/2, 1h 00m)
+
+[agent] tasks: times that are known
+$ tasks -t 3600 Copy Photos
+$ task_done -t 842 Photos
+$ tasks_done
+!Copy: 1/1 1h 00m

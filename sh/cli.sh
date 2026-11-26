@@ -83,13 +83,13 @@ _cli_setup() {
     _CLI_G_BULLET='•' _CLI_G_PTR='❯' _CLI_G_ON='◉' _CLI_G_OFF='○' _CLI_G_FULL='█' _CLI_G_EMPTY='░'
     _CLI_G_H='─' _CLI_G_V='│' _CLI_G_TL='╭' _CLI_G_TR='╮' _CLI_G_BL='╰' _CLI_G_BR='╯'
     _CLI_G_SPIN='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏' _CLI_G_SEP='›' _CLI_G_KEYS='↑/↓' _CLI_G_ELL='…'
-    _CLI_G_TT='┬' _CLI_G_TB='┴' _CLI_G_TLEFT='├' _CLI_G_TRIGHT='┤' _CLI_G_TX='┼' _CLI_G_NODE='●' _CLI_G_MANY='◉'
+    _CLI_G_TT='┬' _CLI_G_TB='┴' _CLI_G_TLEFT='├' _CLI_G_TRIGHT='┤' _CLI_G_TX='┼' _CLI_G_NODE='●' _CLI_G_MANY='◉' _CLI_G_STOP='■'
   else
     _CLI_G_OK='+' _CLI_G_ERR='x' _CLI_G_WARN='!' _CLI_G_INFO='i' _CLI_G_DOT='.' _CLI_G_STEP='>'
     _CLI_G_BULLET='-' _CLI_G_PTR='>' _CLI_G_ON='[x]' _CLI_G_OFF='[ ]' _CLI_G_FULL='#' _CLI_G_EMPTY='-'
     _CLI_G_H='-' _CLI_G_V='|' _CLI_G_TL='+' _CLI_G_TR='+' _CLI_G_BL='+' _CLI_G_BR='+'
     _CLI_G_SPIN='|/-\' _CLI_G_SEP=':' _CLI_G_KEYS='up/down' _CLI_G_ELL='~'
-    _CLI_G_TT='+' _CLI_G_TB='+' _CLI_G_TLEFT='+' _CLI_G_TRIGHT='+' _CLI_G_TX='+' _CLI_G_NODE='*' _CLI_G_MANY='#'
+    _CLI_G_TT='+' _CLI_G_TB='+' _CLI_G_TLEFT='+' _CLI_G_TRIGHT='+' _CLI_G_TX='+' _CLI_G_NODE='*' _CLI_G_MANY='#' _CLI_G_STOP='='
   fi
 }
 
@@ -1134,6 +1134,23 @@ cli_now_ms() {  # cli_now_ms   epoch in milliseconds
   _cli_now; printf '%s\n' "$_CLI_R"
 }
 
+_cli_size() {  # BYTES → $_CLI_R   512 B, 4.2 KB, 28.0 GB: steps of 1024, one decimal, rounded
+  local n=$1 unit=1 name=B next='' tenths=0
+  for next in KB MB GB TB PB ''; do
+    if [ -z "$next" ] || [ "$n" -lt $((unit * 1024)) ]; then
+      if [ "$unit" -eq 1 ]; then _CLI_R="$n B"; return 0; fi
+      tenths=$(((n * 10 + unit / 2) / unit))
+      if [ "$tenths" -lt 10240 ] || [ -z "$next" ]; then break; fi  # 1024.0 is 1.0 of the next unit
+    fi
+    unit=$((unit * 1024)); name=$next
+  done
+  _CLI_R="$((tenths / 10)).$((tenths % 10)) $name"
+}
+
+cli_size() {  # cli_size BYTES   → 512 B, 4.2 KB, 28.0 GB
+  _cli_size "$1"; printf '%s\n' "$_CLI_R"
+}
+
 cli_duration() {  # cli_duration MILLISECONDS   → 340ms, 4.2s, 3m 07s, 1h 02m
   _cli_dur "$1"; printf '%s\n' "$_CLI_R"
 }
@@ -1237,21 +1254,31 @@ cli_progress_done() {  # cli_progress_done   end the bar early (a full bar ends 
 # _cli_kt (total; 0 when it is not counted) _cli_k0 (when it started) _cli_kx (how long it
 # took, or why it failed).
 
-cli_tasks() {  # cli_tasks [-s SEP] TITLE [NAME|WEIGHT]...   several tasks under one total: name them
+cli_tasks() {  # cli_tasks [-s SEP] [-t SECONDS] TITLE [NAME|WEIGHT|SHOW]...   several tasks under one total: name them
   # WEIGHT   how much of the total the task is (default 1): "Scan|1" "Copy|8" "Verify|1"
-  local sep='|' row='' name='' w=''
-  if [ "${1:-}" = -s ]; then sep=$2; shift 2; fi
+  # SHOW     words that say what a running task shows: bytes (28.0 GB/68.9 GB instead of plain numbers),
+  #          percent (no numbers at all), rate (11.2 MB/s), eta (1h 02m left): "Copy | 8 | bytes rate eta"
+  # -t SECONDS   the group started that long ago (when joining work that is already running)
+  local sep='|' row='' name='' w='' show='' ago=0
+  while :; do
+    case ${1:-} in
+      -s) sep=$2; shift 2;;
+      -t) ago=$2; shift 2;;
+      *) break;;
+    esac
+  done
   if [ -n "$_CLI_K_T0" ]; then cli_tasks_done || true; fi
   _CLI_K_TITLE=${1:-Total}
   if [ $# -gt 0 ]; then shift; fi
-  _cli_now; _CLI_K_T0=$_CLI_R
+  _cli_now; _CLI_K_T0=$((_CLI_R - ago * 1000))
   _CLI_K_N=0 _CLI_K_DRAWN=0 _CLI_K_FRAME=0 _CLI_K_Q=0 _CLI_K_DONE=0 _CLI_K_FAILED=0
   for row in "$@"; do
-    _CLI_REST=$row; _cli_field "$sep"; name=$_CLI_R; _cli_field "$sep"; w=$_CLI_R
+    _CLI_REST=$row; _cli_field "$sep"; name=$_CLI_R; _cli_field "$sep"; w=$_CLI_R; _cli_field "$sep"; show=$_CLI_R
     case $w in ''|*[!0-9]*) w=1;; esac
     if [ -z "$name" ]; then continue; fi
     _CLI_K_N=$((_CLI_K_N + 1))
     eval "_cli_kn$_CLI_K_N=\$name _cli_kw$_CLI_K_N=$w _cli_ks$_CLI_K_N=w _cli_kc$_CLI_K_N=0 _cli_kt$_CLI_K_N=0 _cli_k0$_CLI_K_N=0 _cli_kx$_CLI_K_N=''"
+    eval "_cli_ko$_CLI_K_N=\" \$show \" _cli_kq$_CLI_K_N=''"
   done
 }
 
@@ -1264,18 +1291,22 @@ _cli_task_find() {  # NAME → $_CLI_R   the task's number; a name not seen befo
     i=$((i + 1))
   done
   _CLI_K_N=$i
-  eval "_cli_kn$i=\$1 _cli_kw$i=1 _cli_ks$i=w _cli_kc$i=0 _cli_kt$i=0 _cli_k0$i=0 _cli_kx$i=''"
+  eval "_cli_kn$i=\$1 _cli_kw$i=1 _cli_ks$i=w _cli_kc$i=0 _cli_kt$i=0 _cli_k0$i=0 _cli_kx$i='' _cli_ko$i=' ' _cli_kq$i=''"
   _CLI_R=$i
 }
 
-cli_task() {  # cli_task NAME [CURRENT TOTAL]   a task of the group is running; at TOTAL it is done
-  local i=0 s='' cur=${2:-0} total=${3:-0}
+cli_task() {  # cli_task [-t SECONDS] NAME [CURRENT TOTAL]   a task of the group is running; at TOTAL it is done
+  # -t SECONDS   it started that long ago
+  local i=0 s='' ago=''
+  if [ "${1:-}" = -t ]; then ago=$2; shift 2; fi
+  local cur=${2:-0} total=${3:-0}
   _cli_task_find "$1"; i=$_CLI_R
   eval "s=\$_cli_ks$i"
   case $s in
     d|f) return 0;;  # what has ended stays ended
     w) _cli_now; eval "_cli_k0$i=$_CLI_R _cli_ks$i=r";;
   esac
+  if [ -n "$ago" ]; then _cli_now; eval "_cli_k0$i=$((_CLI_R - ago * 1000))"; fi
   if [ "$s" = w ]; then s=now; else s=soon; fi
   if [ "$total" -gt 0 ] && [ "$cur" -gt "$total" ]; then cur=$total; fi
   eval "_cli_kc$i=$cur _cli_kt$i=$total"
@@ -1283,20 +1314,28 @@ cli_task() {  # cli_task NAME [CURRENT TOTAL]   a task of the group is running; 
   _cli_tasks_draw "$s"
 }
 
-cli_task_done() {  # cli_task_done NAME   a task of the group is done
-  _cli_task_find "$1"; _cli_task_end "$_CLI_R" d ''
+cli_task_done() {  # cli_task_done [-t SECONDS] NAME   a task of the group is done (-t: and it took that long)
+  local took=''
+  if [ "${1:-}" = -t ]; then _cli_dur $(($2 * 1000)); took=$_CLI_R; shift 2; fi
+  _cli_task_find "$1"; _cli_task_end "$_CLI_R" d '' "$took"
+}
+
+cli_task_note() {  # cli_task_note NAME [TEXT]   a few words shown next to a running task; no TEXT takes them away
+  local s=''
+  _cli_task_find "$1"; eval "_cli_kq$_CLI_R=\${2:-} s=\$_cli_ks$_CLI_R"
+  if [ "$s" = r ]; then _cli_tasks_draw soon; fi
 }
 
 cli_task_fail() {  # cli_task_fail NAME [TEXT]   a task of the group failed; TEXT says why
   _cli_task_find "$1"; _cli_task_end "$_CLI_R" f "${2:-}"
 }
 
-_cli_task_end() {  # NUMBER d|f TEXT
-  local i=$1 s='' t0=0 name='' took=''
+_cli_task_end() {  # NUMBER d|f TEXT [TIME-TAKEN]
+  local i=$1 s='' t0=0 name='' took=${4:-}
   eval "s=\$_cli_ks$i t0=\$_cli_k0$i name=\$_cli_kn$i"
   if [ "$s" = d ] || [ "$s" = f ]; then return 0; fi
   if [ "$s" = w ]; then _cli_now; t0=$_CLI_R; fi
-  _cli_since "$t0"; took=$_CLI_R
+  if [ -z "$took" ]; then _cli_since "$t0"; took=$_CLI_R; fi
   if [ "$2" = d ]; then
     eval "_cli_ks$i=d _cli_kx$i=\$took"
     if [ "$_CLI_MODE" = plain ]; then _cli_msg ok "$name ($took)"; fi
@@ -1312,11 +1351,12 @@ _cli_task_end() {  # NUMBER d|f TEXT
 _cli_tasks_draw() {  # now|soon|end   show the group as it stands: at once, not too often, or for the last time
   local end='' how=$1 i=0 n=$_CLI_K_N s='' w=0 c=0 t=0 t0=0 x='' name='' sum=0 W=0 pts=0 pct=0 q=0 waiting=0
   local width=0 nw=${#_CLI_K_TITLE} cw=0 bw=0 fill=0 bar='' line='' out='' lines=0 many=0 frame='' p='' page=${CLI_PAGE:-10}
+  local o='' note='' tail='' room=0 now=0 el=0 r=0
   _CLI_K_DONE=0 _CLI_K_FAILED=0
   if [ "$how" = end ]; then end=end; fi
   cw=$((${#n} * 2 + 8))
   while [ "$i" -lt "$n" ]; do
-    i=$((i + 1)); eval "s=\$_cli_ks$i w=\$_cli_kw$i c=\$_cli_kc$i t=\$_cli_kt$i name=\$_cli_kn$i"
+    i=$((i + 1)); eval "s=\$_cli_ks$i w=\$_cli_kw$i c=\$_cli_kc$i t=\$_cli_kt$i name=\$_cli_kn$i o=\$_cli_ko$i note=\$_cli_kq$i"
     pts=0
     if [ "$t" -gt 0 ]; then pts=$((c * 1000 / t)); fi
     case $s in
@@ -1326,7 +1366,18 @@ _cli_tasks_draw() {  # now|soon|end   show the group as it stands: at once, not 
     esac
     W=$((W + w)); sum=$((sum + w * pts))
     if [ "${#name}" -gt "$nw" ]; then nw=${#name}; fi
-    if [ $((${#t} * 2 + 1)) -gt "$cw" ]; then cw=$((${#t} * 2 + 1)); fi
+    # Room after the bar for what the task shows, so that the bars keep their length while it changes.
+    case $o in
+      *' percent '*) r=0;;
+      *' bytes '*) _cli_size "$t"; r=$((10 + ${#_CLI_R}));;
+      *) r=$((${#t} * 2 + 1));;
+    esac
+    if [ "$s" = r ]; then
+      case $o in *' rate '*) r=$((r + 13));; esac
+      case $o in *' eta '*) r=$((r + 13));; esac
+      if [ -n "$note" ]; then r=$((r + 2 + ${#note})); fi
+    fi
+    if [ "$r" -gt "$cw" ]; then cw=$r; fi
   done
   if [ "$W" -eq 0 ]; then W=1; fi
   pct=$((sum / (W * 10)))
@@ -1357,25 +1408,52 @@ _cli_tasks_draw() {  # now|soon|end   show the group as it stands: at once, not 
   case $page in ''|*[!0-9]*|0) page=10;; esac
   if [ "$n" -gt "$page" ]; then many=1; fi  # too many to list: only the ones running or failed
   frame=${_CLI_G_SPIN:$((_CLI_K_FRAME % ${#_CLI_G_SPIN})):1}; _CLI_K_FRAME=$((_CLI_K_FRAME + 1))
-  if [ -n "$end" ]; then frame=$_CLI_G_DOT; fi
+  _cli_now; now=$_CLI_R
   i=0
   while [ "$i" -lt "$n" ]; do
-    i=$((i + 1)); eval "s=\$_cli_ks$i c=\$_cli_kc$i t=\$_cli_kt$i t0=\$_cli_k0$i x=\$_cli_kx$i name=\$_cli_kn$i"
+    i=$((i + 1)); eval "s=\$_cli_ks$i c=\$_cli_kc$i t=\$_cli_kt$i t0=\$_cli_k0$i x=\$_cli_kx$i name=\$_cli_kn$i o=\$_cli_ko$i note=\$_cli_kq$i"
     if [ "$many" -eq 1 ]; then case $s in w|d) continue;; esac; fi
     _cli_fit "$name" "$nw" l; name=$_CLI_R
     case $s in
       w) line="$CLI_DIM$_CLI_G_DOT ${name%"${name##*[! ]}"}$CLI_RESET";;
       d) line="$CLI_GREEN$_CLI_G_OK$CLI_RESET $name  $CLI_DIM$x$CLI_RESET";;
       f) line="$CLI_RED$_CLI_G_ERR$CLI_RESET $name  $CLI_DIM${x:-failed}$CLI_RESET";;
-      *) if [ "$t" -gt 0 ]; then
+      *) # A task still running when the group ends was stopped, and says so.
+         if [ -n "$end" ]; then line="$CLI_YELLOW$_CLI_G_STOP$CLI_RESET $name"; else line="$CLI_CYAN$frame$CLI_RESET $name"; fi
+         tail=''
+         if [ "$t" -gt 0 ]; then
            fill=$((c * bw / t)); printf -v p '%3d' $((c * 100 / t))
            _cli_rep "$_CLI_G_FULL" "$fill"; bar=$_CLI_R
            _cli_rep "$_CLI_G_EMPTY" $((bw - fill)); bar="$CLI_GREEN$bar$CLI_RESET$CLI_DIM$_CLI_R$CLI_RESET"
-           line="$CLI_CYAN$frame$CLI_RESET $name  $bar $p%  $CLI_DIM$c/$t$CLI_RESET"
+           line="$line  $bar $p%"; room=$((width - nw - bw - 12))
+           case $o in
+             *' percent '*) ;;
+             *' bytes '*) _cli_size "$c"; tail=$_CLI_R; _cli_size "$t"; tail="$tail/$_CLI_R";;
+             *) tail="$c/$t";;
+           esac
+           el=$((now - t0))
+           if [ "$el" -ge 1000 ] && [ "$c" -gt 0 ]; then  # how fast, and how long still: from the average so far
+             case $o in *' rate '*)
+               r=$((c * 1000 / el))
+               case $o in
+                 *' bytes '*) _cli_size "$r";;
+                 *) if [ "$r" -lt 10 ]; then r=$((c * 10000 / el)); _CLI_R="$((r / 10)).$((r % 10))"; else _CLI_R=$r; fi;;
+               esac
+               tail="$tail${tail:+  }$_CLI_R/s";;
+             esac
+             case $o in *' eta '*)
+               r=$(((t - c) * (el / 1000) / c))
+               if [ "$r" -lt 60 ]; then _CLI_R="${r}s"; else _cli_dur $((r * 1000)); fi
+               tail="$tail${tail:+  }$_CLI_R left";;
+             esac
+           fi
          else
-           _cli_since "$t0"
-           line="$CLI_CYAN$frame$CLI_RESET $name  $CLI_DIM$_CLI_R$CLI_RESET"
-         fi;;
+           _cli_since "$t0"; tail=$_CLI_R; room=$((width - nw - 5))
+         fi
+         if [ -n "$note" ]; then tail="$tail${tail:+  }$note"; fi
+         if [ "$room" -lt 1 ]; then room=1; fi
+         if [ "${#tail}" -gt "$room" ]; then tail="${tail:0:$((room - 1))}$_CLI_G_ELL"; fi
+         if [ -n "$tail" ]; then line="$line  $CLI_DIM$tail$CLI_RESET"; fi;;
     esac
     out="$out$line${_CLI_ESC}[K$_CLI_NL"; lines=$((lines + 1))
   done
@@ -1409,7 +1487,7 @@ cli_tasks_done() {  # cli_tasks_done   end the group: one line for the whole; st
   if [ "$_CLI_MODE" = agent ]; then printf '%s: %d/%d %s\n' "$_CLI_K_TITLE" "$_CLI_K_DONE" "$_CLI_K_N" "$_CLI_R" >&2
   else _cli_msg "$level" "$_CLI_K_TITLE ($_CLI_K_DONE/$_CLI_K_N, $_CLI_R)"; fi
   while [ "$i" -lt "$_CLI_K_N" ]; do
-    i=$((i + 1)); unset "_cli_kn$i" "_cli_kw$i" "_cli_ks$i" "_cli_kc$i" "_cli_kt$i" "_cli_k0$i" "_cli_kx$i"
+    i=$((i + 1)); unset "_cli_kn$i" "_cli_kw$i" "_cli_ks$i" "_cli_kc$i" "_cli_kt$i" "_cli_k0$i" "_cli_kx$i" "_cli_ko$i" "_cli_kq$i"
   done
   _CLI_K_T0='' _CLI_K_N=0 _CLI_K_DRAWN=0
   return "$rc"
@@ -1771,8 +1849,11 @@ cli_password() {  # cli_password QUESTION   → the answer on stdout; typing is 
   # At a terminal the typing is hidden whatever the mode: in `tool export | tar x` the output
   # is a pipe, so the mode is plain, and a person is still typing the password.
   if _cli_tty || { [ -t 0 ] && [ "$_CLI_MODE" != agent ]; }; then
-    printf '%s?%s %s ' "$CLI_CYAN" "$CLI_RESET" "$q" >&2
+    # Echo goes off before the question shows, and stays off between keys: what is typed the
+    # moment the question appears, or pasted in one go, stays hidden.
     _cli_raw_on
+    if [ -n "$_CLI_STTY" ]; then stty -echo 2>/dev/null || true; fi
+    printf '%s?%s %s ' "$CLI_CYAN" "$CLI_RESET" "$q" >&2
     while _cli_key; do
       case $_CLI_KEY in
         enter|eof) break;;

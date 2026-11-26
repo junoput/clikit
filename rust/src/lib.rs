@@ -49,7 +49,7 @@ pub use msg::{debug, die, error, hint, info, ok, step, steps, warn};
 pub use progress::{exec, exit_code, has, require, spin, spin_command, Progress};
 pub use prompt::{confirm, input, input_with, multiselect, password, pause, select, wizard, PromptError};
 pub use tasks::{Task, Tasks};
-pub use text::split_words;
+pub use text::{size, split_words};
 pub use time::{countdown, duration, time, Timer};
 pub use timeline::{timeline, Timeline};
 pub use tree::{browse, tree, tree_dir, Browse, Tree};

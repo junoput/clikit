@@ -83,9 +83,13 @@ each call in each mode.
 | `time(label, \|\| ...)` | `cli_time` | run a closure and report how long it took |
 | `countdown(seconds, label)` | `cli_countdown` | wait, showing the seconds left |
 | `duration(ms)` | `cli_duration` | `340ms`, `4.2s`, `3m 07s` |
+| `size(bytes)` | `cli_size` | `512 B`, `1.5 KB`, `27.9 GB` |
 | `Progress::new(total, label)`, `.inc()`, `.set(n)`, `.done()` | `cli_progress` | a progress bar; when it ends it becomes one `✓ label (n/n, 1.2s)` line |
 | `Tasks::new(title)`, `.add(name, weight)`, `.finish()` | `cli_tasks`, `cli_tasks_done` | several tasks under one total |
 | `task.set(n, total)`, `.start()`, `.done()`, `.fail(why)` | `cli_task`, `cli_task_done`, `cli_task_fail` | one task of the group; can be sent to a thread |
+| `tasks.add(..).bytes().rate().eta()`, `.percent()` | the `SHOW` cell | what a running task shows: sizes, speed, time left, or only a percentage |
+| `task.note(text)` | `cli_task_note` | a few words next to a running task |
+| `tasks.started(ago)`, `task.started(ago)`, `task.done_in(took)` | `-t SECONDS` | times that are known, for joining work already running |
 | `spin(label, \|\| -> Result)` | | a spinner around a closure |
 | `spin_command(label, &mut Command)` | `cli_spin` | a spinner around a program; its output shows only if it fails |
 | `select`, `multiselect`, `confirm`, `input`, `password`, `pause` | `cli_select` ... | prompts; they return `Result<_, PromptError>` |
@@ -163,6 +167,12 @@ if !backup.finish() { /* a task called fail(why) */ }
 ```
 
 ![A job in four stages under one total](../docs/img/tasks.svg)
+
+```rust
+let photos = backup.add("Photos", 6).bytes().rate().eta();
+photos.set(done, size);          // Photos  ████░░░  33%  10.9 GB/32.8 GB  11.2 MB/s  33m 20s left
+photos.note("verifying");        // a few words last on the line, replaceable
+```
 
 A `Task` is `Clone + Send`: give each thread its own and they are drawn side by side. A log gets
 one line per finished task and one each time the total passes a quarter; an agent gets the

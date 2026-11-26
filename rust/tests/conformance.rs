@@ -141,6 +141,10 @@ fn prompt_status<T>(result: Result<T, PromptError>, print: impl FnOnce(T)) -> i3
     }
 }
 
+fn seconds(text: &str) -> std::time::Duration {
+    std::time::Duration::from_secs(text.parse().expect("seconds"))
+}
+
 /// Leading `FLAG VALUE` pairs, then the rest.
 fn values<'a>(flag: &str, args: &'a [String]) -> (Vec<&'a str>, &'a [String]) {
     let mut found = Vec::new();
@@ -264,28 +268,61 @@ fn call(words: &[String], running: &mut Running) -> i32 {
             if let Some((earlier, _)) = running.group.take() {
                 earlier.finish();
             }
-            let (separator, rows) = match args {
-                [flag, value, rest @ ..] if flag == "-s" => (value.as_str(), rest),
-                rest => ("|", rest),
-            };
+            let (mut separator, mut ago, mut rows) = ("|", None, args);
+            loop {
+                match rows {
+                    [flag, value, rest @ ..] if flag == "-s" => (separator, rows) = (value.as_str(), rest),
+                    [flag, value, rest @ ..] if flag == "-t" => (ago, rows) = (Some(seconds(value)), rest),
+                    _ => break,
+                }
+            }
             let tasks = Tasks::new(rows.first().map_or("Total", String::as_str));
+            if let Some(ago) = ago {
+                tasks.started(ago);
+            }
             let mut named = Vec::new();
             for row in rows.iter().skip(1) {
                 let mut cells = row.split(separator).map(|cell| cell.trim_matches(' '));
                 let name = cells.next().unwrap_or_default();
                 let weight = cells.next().filter(|weight| weight.bytes().all(|b| b.is_ascii_digit()));
+                let show = cells.next().unwrap_or_default();
                 if !name.is_empty() {
-                    named.push((name.to_string(), tasks.add(name, weight.and_then(|w| w.parse().ok()).unwrap_or(1))));
+                    let mut task = tasks.add(name, weight.and_then(|w| w.parse().ok()).unwrap_or(1));
+                    for word in show.split(' ') {
+                        task = match word {
+                            "bytes" => task.bytes(),
+                            "percent" => task.percent(),
+                            "rate" => task.rate(),
+                            "eta" => task.eta(),
+                            _ => task,
+                        };
+                    }
+                    named.push((name.to_string(), task));
                 }
             }
             running.group = Some((tasks, named));
         }
-        "task" => match args {
-            [name, current, total] => running.task(name).set(current.parse().unwrap(), total.parse().unwrap()),
-            [name] => running.task(name).start(),
-            _ => panic!("task NAME [CURRENT TOTAL]"),
+        "task" => {
+            let args = match args {
+                [flag, ago, rest @ ..] if flag == "-t" => {
+                    running.task(&rest[0]).started(seconds(ago));
+                    rest
+                }
+                rest => rest,
+            };
+            match args {
+                [name, current, total] => running.task(name).set(current.parse().unwrap(), total.parse().unwrap()),
+                [name] => running.task(name).start(),
+                _ => panic!("task [-t SECONDS] NAME [CURRENT TOTAL]"),
+            }
+        }
+        "task_done" => match args {
+            [flag, took, name] if flag == "-t" => running.task(name).done_in(seconds(took)),
+            [name] => running.task(name).done(),
+            _ => panic!("task_done [-t SECONDS] NAME"),
         },
-        "task_done" => running.task(&args[0]).done(),
+        "task_note" => running.task(&args[0]).note(args.get(1).map_or("", String::as_str)),
+        "size" => println_out(&clikit::size(args[0].parse().unwrap())),
         "task_fail" => running.task(&args[0]).fail(args.get(1).map_or("", String::as_str)),
         "tasks_done" => {
             if let Some((tasks, _)) = running.group.take() {

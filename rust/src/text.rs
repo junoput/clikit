@@ -19,6 +19,33 @@ pub(crate) fn truncate(text: &str, width: usize) -> &str {
     }
 }
 
+/// A number of bytes as text: `512 B`, `4.2 KB`, `28.0 GB`. Steps of 1024, one decimal, rounded.
+///
+/// ```
+/// assert_eq!(clikit::size(1536), "1.5 KB");
+/// assert_eq!(clikit::size(30_000_000_000), "27.9 GB");
+/// ```
+pub fn size(bytes: u64) -> String {
+    const NAMES: [&str; 5] = ["KB", "MB", "GB", "TB", "PB"];
+    let n = u128::from(bytes);
+    let (mut unit, mut name, mut tenths) = (1u128, "B", 0);
+    for i in 0..=NAMES.len() {
+        let next = NAMES.get(i).copied();
+        if next.is_none() || n < unit * 1024 {
+            if unit == 1 {
+                return format!("{n} B");
+            }
+            tenths = (n * 10 + unit / 2) / unit;
+            // 1024.0 is 1.0 of the next unit.
+            if tenths < 10240 || next.is_none() {
+                break;
+            }
+        }
+        (unit, name) = (unit * 1024, next.unwrap_or(name));
+    }
+    format!("{}.{} {name}", tenths / 10, tenths % 10)
+}
+
 /// Split a line into words the way a shell would: spaces separate, quotes group,
 /// a backslash takes the next character literally.
 ///

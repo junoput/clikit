@@ -182,6 +182,8 @@ check "plain progress prints quarters" "copy: 0% (0/8)${NL}copy: 25% (2/8)${NL}c
   "$(for i in 0 1 2 3 4 5 6 7 8; do cli_progress "$i" 8 copy; done 2>&1)"
 cli_mode rich
 has "rich tasks draw each bar and the total" "⠋ a    ██████░░░░░░░░░░░░░░░░░░  25%  1/4${NL}· b${NL}  Job  ███░░░░░░░░░░░░░░░░░░░░░  12%  0/2 " "$(cli_tasks Job a b 2>&1; cli_task a 1 4 2>&1 | strip)"
+check "size" "1.5 KB 27.9 GB" "$(cli_size 1536) $(cli_size 30000000000)"
+has "rich tasks show bytes, and a note" "  27.9 GB/68.9 GB  checking" "$(cli_tasks Copy 'Photos|1|bytes' 2>&1; cli_task Photos 30000000000 74000000000 2>/dev/null; cli_task_note Photos checking 2>&1 | strip)"
 check "tasks: a failure is the exit status" 1 "$(status eval 'cli_tasks Job a; cli_task_fail a why; cli_tasks_done')"
 check "tasks leave no variables behind" "" "$(cli_tasks Job a b 2>/dev/null; cli_task a 1 2 2>/dev/null; cli_task_done b 2>/dev/null; cli_tasks_done 2>/dev/null; set | grep '^_cli_k[a-z0-9]*[0-9]=' || true)"
 has "rich progress draws a bar" "████████████░░░░░░░░░░░░  50% 2/4" "$(cli_progress 2 4 copy 2>&1 | strip)"

@@ -100,6 +100,30 @@ fn what_the_theme_decided_can_be_asked() {
 }
 
 #[test]
+fn sizes_and_what_a_task_shows() {
+    assert_eq!([clikit::size(0), clikit::size(1023), clikit::size(1024)], ["0 B", "1023 B", "1.0 KB"]);
+    assert_eq!([clikit::size(1_048_575), clikit::size(u64::MAX)], ["1.0 MB", "16384.0 PB"]);
+
+    use std::time::Duration;
+    let run =
+        Session::new(Mode::Rich).env("NO_COLOR", "1").env("LANG", "en_US.UTF-8").env("COLUMNS", "100").run(|| {
+            let job = clikit::Tasks::new("Copy");
+            job.started(Duration::from_secs(7200));
+            let photos = job.add("Photos", 1).bytes().rate().eta();
+            photos.started(Duration::from_secs(1000));
+            photos.set(11_744_051_200, 35_232_153_600);
+            photos.note("verifying");
+            job.add("Earlier", 1).done_in(Duration::from_secs(842));
+        });
+    let lines: Vec<&str> = run.err.lines().collect();
+    assert!(lines[0].contains("33%  10.9 GB/32.8 GB  11.2 MB/s  33m "), "{}", lines[0]);
+    assert!(run.err.contains(" left  verifying"), "the note comes last: {}", run.err);
+    assert!(run.err.contains("✓ Earlier  14m 02s"), "{}", run.err);
+    assert!(run.err.contains("● Copy (1/2, 2h 00m)"), "{}", run.err);
+    assert!(run.err.contains("■ Photos"), "a task still running at the end was stopped: {}", run.err);
+}
+
+#[test]
 fn tasks_on_threads() {
     let run = capture(Mode::Agent, || {
         let job = clikit::Tasks::new("Job");

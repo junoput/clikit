@@ -223,6 +223,7 @@ are off.
 | `cli_time LABEL CMD...` | run a command and report how long it took |
 | `cli_countdown SECONDS [LABEL]` | wait, showing the seconds left |
 | `cli_duration MS` | `340ms`, `4.2s`, `3m 07s`, `1h 02m` |
+| `cli_size BYTES` | `512 B`, `1.5 KB`, `27.9 GB` |
 
 **Progress**
 
@@ -230,9 +231,10 @@ are off.
 |---|---|
 | `cli_progress CURRENT TOTAL [LABEL]` | call it in your loop; at TOTAL the bar becomes one `✓` line |
 | `cli_progress_done` | end the bar early |
-| `cli_tasks TITLE [NAME\|WEIGHT]...` | several tasks under one total: name them |
-| `cli_task NAME [CURRENT TOTAL]` | a task is running; at TOTAL it is done |
-| `cli_task_done NAME`, `cli_task_fail NAME [TEXT]` | how a task ended |
+| `cli_tasks [-t SECONDS] TITLE [NAME\|WEIGHT\|SHOW]...` | several tasks under one total: name them |
+| `cli_task [-t SECONDS] NAME [CURRENT TOTAL]` | a task is running; at TOTAL it is done |
+| `cli_task_note NAME [TEXT]` | a few words next to a running task |
+| `cli_task_done [-t SECONDS] NAME`, `cli_task_fail NAME [TEXT]` | how a task ended |
 | `cli_tasks_done` | end the group; exit status 1 if a task failed |
 | `cli_spin LABEL CMD...` | spinner while the command runs; its output shows only if it fails |
 
@@ -250,6 +252,20 @@ cli_tasks_done || cli_die "The backup is not complete"
 ```
 
 ![A job in four stages under one total](../docs/img/tasks.svg)
+
+A task can show more than `60/120`. The third cell of its row says what: `bytes` for sizes,
+`rate` for speed, `eta` for the time left, `percent` for a task that knows nothing but a
+percentage. `cli_task_note` adds what it is doing right now:
+
+```sh
+cli_tasks "Copy" "Photos | 6 | bytes rate eta" "Phone | 1 | percent"
+cli_task Photos "$done" "$size"          # Photos  ████░░░  33%  10.9 GB/32.8 GB  11.2 MB/s  33m 20s left
+cli_task_note Phone "verifying"          # Phone   ██░░░░░  37%  verifying
+```
+
+When the work was already running before your script looked, give the times you know:
+`cli_tasks -t 3600 ...` (the group started an hour ago), `cli_task -t 90 NAME ...` (this task
+90 seconds ago), `cli_task_done -t 842 NAME` (it took 14m 02s).
 
 Update several tasks in turn and they move side by side. For work that really runs at the same
 time, let each background job write `CURRENT TOTAL` to a file, and report from the main script:
