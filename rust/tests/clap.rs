@@ -175,6 +175,27 @@ fn interactive_tab_completes_options() {
 }
 
 #[test]
+fn interactive_mode_flags_last_one_line() {
+    let mut modes = Vec::new();
+    Session::new(Mode::Plain).stdin("--agent list\nlist\n--plain list\nlist\n").run(|| {
+        clikit::clap::interactive::<Todo>(|_| modes.push(clikit::mode()));
+        assert_eq!(clikit::mode(), Mode::Plain);
+    });
+    assert_eq!(modes, [Mode::Agent, Mode::Plain, Mode::Plain, Mode::Plain]);
+
+    // A program with its own prompt gets the same from a guard around each line.
+    Session::new(Mode::Rich).run(|| {
+        {
+            let _line = clikit::mode_guard();
+            assert!(clikit::clap::try_parse_from::<Todo>(["todo", "--agent", "--no-color", "list"]).is_ok());
+            assert_eq!(clikit::mode(), Mode::Agent);
+        }
+        assert_eq!(clikit::mode(), Mode::Rich);
+        assert_eq!(clikit::style("red", "x"), "\x1b[31mx\x1b[0m", "colours are back too");
+    });
+}
+
+#[test]
 fn interactive_history() {
     let add = |text: &str| Action::Add { text: text.into(), priority: 2 };
     assert_eq!(typed("add a\n\x1b[A\nexit\n").0, [add("a"), add("a")]);

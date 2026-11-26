@@ -7,7 +7,7 @@ use std::collections::{HashMap, VecDeque};
 use std::io::{self, BufRead, IsTerminal, Read, Write};
 use std::sync::mpsc::{sync_channel, Receiver};
 use std::sync::{Mutex, OnceLock, RwLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Who the output is written for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -133,8 +133,19 @@ pub(crate) struct State {
     pub step_n: u32,
 }
 
+/// What is being redrawn in place on standard error: a block of task lines, or a progress bar.
+/// A status line that arrives meanwhile goes above it: `clear`, the line, then `text` again.
+#[derive(Clone)]
+pub(crate) struct Live {
+    /// Moves to where the drawing starts and erases it.
+    pub clear: String,
+    /// Draws it again.
+    pub text: String,
+}
+
 /// A captured run: its own mode, environment, input and output.
 pub(crate) struct Scope {
+    pub live: Option<Live>,
     pub theme: Theme,
     pub env: HashMap<String, String>,
     pub out: String,
@@ -148,6 +159,7 @@ impl Scope {
         let lookup = |name: &str| env.get(name).filter(|v| !v.is_empty()).cloned();
         let theme = Theme::detect(&lookup, false, Some(mode), None);
         Scope {
+            live: None,
             theme,
             env,
             out: String::new(),
@@ -182,6 +194,9 @@ struct Forced {
 static FORCED: RwLock<Forced> = RwLock::new(Forced { mode: None, color: None });
 static THEME: RwLock<Option<Theme>> = RwLock::new(None);
 static STATE: Mutex<State> = Mutex::new(State { step_i: 0, step_n: 0 });
+static LIVE: Mutex<Option<Live>> = Mutex::new(None);
+/// The terminal's width and when it was asked for: asking means running `stty`.
+static WIDTH: Mutex<Option<(Instant, usize)>> = Mutex::new(None);
 
 fn real_env(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|v| !v.is_empty())
@@ -261,6 +276,48 @@ pub fn set_color(on: bool) {
     force(|f| f.color = Some(on));
 }
 
+/// The mode and colour that were forced, to put back later with [`set_forced`].
+pub(crate) fn forced() -> (Option<Mode>, Option<bool>) {
+    if let Some(theme) = SCOPE.with(|s| s.borrow().as_ref().map(|scope| scope.theme)) {
+        return (Some(theme.mode), Some(theme.color));
+    }
+    let forced = FORCED.read().unwrap_or_else(|e| e.into_inner());
+    (forced.mode, forced.color)
+}
+
+pub(crate) fn set_forced(mode: Option<Mode>, color: Option<bool>) {
+    force(|f| (f.mode, f.color) = (mode, color));
+}
+
+/// Puts the mode and the colours back, when dropped, to what they were when it was made.
+pub struct ModeGuard {
+    mode: Option<Mode>,
+    color: Option<bool>,
+}
+
+/// Remember the mode; it is put back when the guard is dropped.
+///
+/// For a program with its own command prompt: `--agent`, `--plain` and `--no-color` on one line
+/// (see [`crate::clap::try_parse_from`]) and [`set_mode`] inside a command should not outlast it.
+///
+/// ```
+/// {
+///     let _line = clikit::mode_guard();
+///     clikit::set_mode(clikit::Mode::Agent); // what `--agent` on that line does
+/// }
+/// // Here the mode is what it was.
+/// ```
+pub fn mode_guard() -> ModeGuard {
+    let (mode, color) = forced();
+    ModeGuard { mode, color }
+}
+
+impl Drop for ModeGuard {
+    fn drop(&mut self) {
+        set_forced(self.mode, self.color);
+    }
+}
+
 /// The mode, if [`set_mode`] forced one. Child processes are told about it.
 pub(crate) fn forced_mode() -> Option<Mode> {
     FORCED.read().unwrap_or_else(|e| e.into_inner()).mode
@@ -276,8 +333,43 @@ pub(crate) fn with_state<R>(f: impl FnOnce(&mut State) -> R) -> R {
     }
 }
 
+fn with_live<R>(f: impl FnOnce(&mut Option<Live>) -> R) -> R {
+    let mut f = Some(f);
+    let scoped = SCOPE.with(|s| s.borrow_mut().as_mut().map(|scope| (f.take().expect("called once"))(&mut scope.live)));
+    match scoped {
+        Some(result) => result,
+        None => (f.take().expect("called once"))(&mut LIVE.lock().unwrap_or_else(|e| e.into_inner())),
+    }
+}
+
+/// Draw something that is redrawn in place (`text`), and say how a status line gets past it.
+/// `None` when the drawing has ended.
+pub(crate) fn live(text: &str, now: Option<Live>) {
+    err(text);
+    with_live(|slot| *slot = now);
+}
+
+/// A status line. It goes above whatever is being redrawn in place.
+pub(crate) fn status(line: &str) {
+    match with_live(|slot| slot.clone()) {
+        Some(live) => err(&format!("{}{line}{}", live.clear, live.text)),
+        None => err(line),
+    }
+}
+
 /// Write content to standard output.
 pub(crate) fn out(text: &str) {
+    // Content printed while something is redrawn in place goes above it, like a status line.
+    if let Some(live) = with_live(|slot| slot.clone()) {
+        err(&live.clear);
+        out_raw(text);
+        err(&live.text);
+        return;
+    }
+    out_raw(text);
+}
+
+fn out_raw(text: &str) {
     let captured = SCOPE.with(|s| s.borrow_mut().as_mut().map(|scope| scope.out.push_str(text)));
     if captured.is_none() {
         let mut stream = io::stdout().lock();
@@ -310,6 +402,13 @@ pub(crate) fn width() -> usize {
         return columns;
     }
     if stdin_tty() && cfg!(unix) {
+        // A second is soon enough to notice a resized window, and a progress bar asks often.
+        let mut cached = WIDTH.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((at, columns)) = *cached {
+            if at.elapsed() < Duration::from_secs(1) {
+                return columns;
+            }
+        }
         let size = std::process::Command::new("stty")
             .arg("size")
             .stdin(std::process::Stdio::inherit())
@@ -319,6 +418,7 @@ pub(crate) fn width() -> usize {
             let text = String::from_utf8_lossy(&size.stdout);
             if let Some(columns) = text.split_whitespace().nth(1).and_then(|c| c.parse().ok()) {
                 if columns > 0 {
+                    *cached = Some((Instant::now(), columns));
                     return columns;
                 }
             }

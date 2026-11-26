@@ -73,6 +73,23 @@ fn tasks_under_one_total() {
 }
 
 #[test]
+fn status_lines_and_content_go_above_what_is_redrawn() {
+    let run = Session::new(Mode::Rich).env("NO_COLOR", "1").env("LANG", "en_US.UTF-8").run(|| {
+        let job = clikit::Tasks::new("Job");
+        job.add("a", 1).set(1, 2);
+        clikit::list(&["content"]);
+        job.finish();
+        clikit::list(&["after"]);
+    });
+    // Standard output gets the content only; the block is taken away before it and put back after.
+    assert_eq!(run.out, "  • content\n  • after\n");
+    let block = "⠋ a    ████████████░░░░░░░░░░░░  50%  1/2\x1b[K\n";
+    assert!(run.err.starts_with(block), "{:?}", run.err);
+    assert_eq!(run.err.matches("\x1b[2A\x1b[J").count(), 1, "erased once, for the content: {:?}", run.err);
+    assert_eq!(run.err.matches(block).count(), 2, "drawn, and drawn again under the content: {:?}", run.err);
+}
+
+#[test]
 fn tasks_on_threads() {
     let run = capture(Mode::Agent, || {
         let job = clikit::Tasks::new("Job");

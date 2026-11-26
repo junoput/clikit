@@ -194,7 +194,10 @@ pub fn input_with<S: AsRef<str>>(
 /// A line of text that is not shown while it is typed.
 pub fn password(question: &str) -> Result<String, PromptError> {
     let t = ctx::theme();
-    if !keys_available() {
+    // At a terminal the typing is hidden whatever the mode: `tool export | tar x` is plain,
+    // because its output is a pipe, and still has a person typing the password.
+    let typed = ctx::stdin_tty() && t.mode != Mode::Agent;
+    if !keys_available() && !typed {
         return read_answer().ok_or_else(|| {
             msg(Level::Error, &format!("input required: {question}. Pipe the answer on stdin."));
             PromptError::NoAnswer

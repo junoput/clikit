@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::ctx::{self, Mode, CYAN, DIM, GREEN, RESET};
+use crate::ctx::{self, Live, Mode, CYAN, DIM, GREEN, RESET};
 use crate::msg::{msg, Level};
 use crate::time::since;
 
@@ -83,14 +83,15 @@ impl Progress {
                 let frame = frames[self.updates % frames.len()];
                 self.updates += 1;
                 let digits = total.to_string().len();
-                ctx::err(&format!(
+                let line = format!(
                     "\r{}{frame}{reset} {prefix}{}{}{reset}{dim}{}{reset} {percent:>3}% {dim}{current:>digits$}/{total} {}{reset}\x1b[K",
                     t.c(CYAN),
                     t.c(GREEN),
                     t.g("█", "#").repeat(fill),
                     t.g("░", "-").repeat(BAR_WIDTH as usize - fill),
                     since(start),
-                ));
+                );
+                ctx::live(&line, Some(Live { clear: "\r\x1b[K".to_string(), text: line.clone() }));
             }
         }
         if current >= total {
@@ -122,6 +123,7 @@ impl Progress {
             }
             Mode::Plain => {}
             Mode::Rich => {
+                ctx::live("", None);
                 // The bar gives way to one line, shaped like the result of a spinner.
                 let text = if label.is_empty() {
                     format!("{current}/{total} ({took})")

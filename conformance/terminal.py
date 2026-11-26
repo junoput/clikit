@@ -23,6 +23,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CLI = os.path.join(ROOT, "sh", "cli.sh")
 TODO = os.path.join(ROOT, "sh", "examples", "todo.sh")
 RUST_DEMO = os.path.join(ROOT, "rust", "target", "debug", "examples", "demo")
+RUST_PASSWORD = os.path.join(ROOT, "rust", "target", "debug", "examples", "password")
 
 # The program runs under a parent that survives Ctrl-C, as it would under an interactive shell.
 # Started directly it would lead the session, and its death would hang up the terminal before
@@ -77,6 +78,37 @@ def interrupted(argv, keys=b""):
     return normal, "killed by signal %d" % -code if code < 0 else "exit %d" % code
 
 
+def typed_in_secret(command):
+    """Run `command | cat`, type a password. Returns (the question was shown, times the password appeared)."""
+    env = {name: os.environ[name] for name in ("PATH", "HOME", "TMPDIR") if name in os.environ}
+    env.update({"TERM": "xterm-256color", "LANG": "en_US.UTF-8", "CLI_AGENT": "0"})
+    pid, fd = pty.fork()
+    if pid == 0:
+        os.execvpe("/bin/sh", ["/bin/sh", "-c", command + " | cat"], env)
+    seen = b""
+
+    def wait(seconds):
+        nonlocal seen
+        end = time.time() + seconds
+        while time.time() < end:
+            if select.select([fd], [], [], 0.05)[0]:
+                try:
+                    seen += os.read(fd, 65536)
+                except OSError:
+                    return
+
+    wait(1.2)
+    asked = b"Password" in seen
+    os.write(fd, b"hunter2\r")
+    wait(1.0)
+    try:
+        os.kill(pid, 9)
+        os.waitpid(pid, 0)
+    except OSError:
+        pass
+    return asked, seen.count(b"hunter2")
+
+
 def main():
     prompts = [  # what to run through cli.sh, and what to type before Ctrl-C
         (["select", "Pick", "a", "b", "c"], b"\x1b[B"),
@@ -110,7 +142,19 @@ def main():
         if not good:
             print("FAIL %s: terminal %s, program %s" % (name, "normal" if normal else "left without echo", ended))
     print("%d prompts interrupted, %d left the terminal broken or kept running" % (len(runs), failed))
-    sys.exit(1 if failed else 0)
+
+    # A password is hidden when the output is a pipe too: it must appear once, where `cat` prints it.
+    secrets = [("%s: password" % shell, '%s "%s" password Password' % (shell, CLI)) for shell in sorted(set(shells))]
+    if os.path.exists(RUST_PASSWORD):
+        secrets.append(("rust: password", '"%s"' % RUST_PASSWORD))
+    shown = 0
+    for name, command in secrets:
+        asked, times = typed_in_secret(command)
+        if not asked or times != 1:
+            shown += 1
+            print("FAIL %s: question %s, password on the screen %d times" % (name, "shown" if asked else "missing", times))
+    print("%d passwords typed with the output piped, %d shown or asked without a question" % (len(secrets), shown))
+    sys.exit(1 if failed or shown else 0)
 
 
 if __name__ == "__main__":

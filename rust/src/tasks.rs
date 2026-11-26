@@ -2,15 +2,25 @@
 
 use std::fmt::Display;
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
-use crate::ctx::{self, Mode, BOLD, CYAN, DIM, GREEN, RED, RESET};
+use crate::ctx::{self, Live, Mode, BOLD, CYAN, DIM, GREEN, RED, RESET};
 use crate::layout::fit;
 use crate::msg::{msg, Level};
 use crate::text::len;
 use crate::time::since;
 
 const BAR_WIDTH: isize = 24;
+/// At a terminal, a task that only moved on is not drawn more often than this.
+const REDRAW: Duration = Duration::from_millis(80);
+
+/// When to draw: at once, at once and for the last time, or soon (not too often).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Draw {
+    Now,
+    Soon,
+    End,
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum State {
@@ -38,6 +48,8 @@ struct Group {
     items: Vec<Item>,
     /// The lines on the screen that the next drawing replaces.
     drawn: usize,
+    /// When the block was last drawn.
+    shown: Option<Instant>,
     frame: usize,
     quarter: u64,
     done: usize,
@@ -51,6 +63,7 @@ impl Group {
     fn run(&mut self, id: usize, current: u64, total: u64) {
         self.used = true;
         let item = &mut self.items[id];
+        let started = item.state == State::Waiting;
         match item.state {
             State::Done | State::Failed => return, // what has ended stays ended
             State::Waiting => (item.start, item.state) = (Some(Instant::now()), State::Running),
@@ -61,7 +74,7 @@ impl Group {
         if total > 0 && current >= total {
             self.end(id, State::Done, "");
         } else {
-            self.draw(false);
+            self.draw(if started { Draw::Now } else { Draw::Soon });
         }
     }
 
@@ -86,11 +99,12 @@ impl Group {
             }
             item.text = why.to_string();
         }
-        self.draw(false);
+        self.draw(Draw::Now);
     }
 
     /// Show the group as it stands; at the end, what stays on the screen.
-    fn draw(&mut self, end: bool) {
+    fn draw(&mut self, how: Draw) {
+        let end = how == Draw::End;
         let t = ctx::theme();
         let n = self.items.len();
         let (mut waiting, mut sum, mut weight) = (0, 0, 0);
@@ -126,6 +140,12 @@ impl Group {
             }
             Mode::Rich => {}
         }
+        // A backup of fifty thousand files would otherwise draw fifty thousand times. Without a
+        // terminal (a test, a recording) every step is drawn.
+        if how == Draw::Soon && ctx::stderr_tty() && self.shown.is_some_and(|at| at.elapsed() < REDRAW) {
+            return;
+        }
+        self.shown = Some(Instant::now());
 
         let width = ctx::width();
         name_width = name_width.min((width / 3).max(8));
@@ -188,7 +208,9 @@ impl Group {
             lines += 1;
         }
         let up = if self.drawn > 0 { format!("\x1b[{}A", self.drawn) } else { String::new() };
-        ctx::err(&format!("{up}{out}\x1b[J"));
+        let text = format!("{out}\x1b[J");
+        let live = Live { clear: format!("\x1b[{lines}A\x1b[J"), text: text.clone() };
+        ctx::live(&format!("{up}{text}"), if end || lines == 0 { None } else { Some(live) });
         self.drawn = lines;
     }
 
@@ -197,7 +219,7 @@ impl Group {
             return self.failed == 0;
         }
         self.ended = true;
-        self.draw(true);
+        self.draw(Draw::End);
         let (title, done, n, took) = (&self.title, self.done, self.items.len(), since(self.start));
         if ctx::theme().mode == Mode::Agent {
             ctx::err(&format!("{title}: {done}/{n} {took}\n"));
@@ -277,6 +299,7 @@ impl Tasks {
             start: Instant::now(),
             items: Vec::new(),
             drawn: 0,
+            shown: None,
             frame: 0,
             quarter: 0,
             done: 0,

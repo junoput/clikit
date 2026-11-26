@@ -284,7 +284,7 @@ gets the failures and one line at the end.
 | `cli_input [-c CANDIDATE]... QUESTION [DEFAULT]` | a line of text; Tab steps through the candidates |
 | `cli_browse [-a] [-d] QUESTION [DIR]` | walk through the files under `DIR` and pick one; `-d` picks a directory |
 | `cli_browse -l [-d] [-s SEP] QUESTION ROW...` | the same over a list of paths (`PATH\|NOTE` rows) |
-| `cli_password QUESTION` | hidden typing |
+| `cli_password QUESTION` | hidden typing, also when the output is piped |
 | `cli_pause [TEXT]` | wait for a key |
 | `cli_wizard FUNCTION...` | ask questions in order; Escape goes back one |
 
@@ -392,8 +392,11 @@ untouched, so it can do its own parsing.
 - `cli_tree -p` does not follow symbolic links to directories; `cli_browse` opens them when asked.
 - A tree does not mark what a directory holds before it is opened, and a file name with a
   newline in it breaks the drawing.
-- While a bar or a group of tasks is on the screen, other output (`cli_info`, a command's own)
-  lands in the middle of it. Finish it first, or keep the output for afterwards.
+- While a bar or a group of tasks is on the screen, status lines (`cli_info`, `cli_warn`,
+  `cli_hint`, ...) go above it. Anything else (`cli_table`, a command's own output) lands in the
+  middle of it: finish the bar first, or keep that output for afterwards.
+- At a terminal a group of tasks redraws at most every 80 ms, except on bash 3.2, which has no
+  clock that fine and draws on every call.
 - A group of tasks belongs to one shell process: a background job cannot call `cli_task` for it.
 - Short options cannot be combined: write `-a -b`, not `-ab`.
 - bash 3.2 has no sub-second clock, so durations there are in whole seconds.

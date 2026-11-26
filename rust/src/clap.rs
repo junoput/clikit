@@ -361,6 +361,8 @@ pub fn interactive<T: Parser>(mut run: impl FnMut(T)) {
             }
         };
         let args = std::iter::once(app.clone()).chain(words);
+        // `--agent`, `--plain` and `--no-color` on a line are for that line.
+        let _line = ctx::mode_guard();
         if let Ok(parsed) = try_parse_from::<T>(args) {
             run(parsed);
         }

@@ -3757,3 +3757,99 @@ $ tasks_done
 !x Photos  failed\e[K
 !\e[Jx Backup (1/2, <T>)
 = 1
+
+[rich] tasks: a status line goes above the tasks
+% NO_COLOR=1
+$ tasks Backup Scan Photos
+$ task Photos 1 4
+$ warn "The phone is locked"
+$ task Photos 2 4
+$ hint "Unlock it to go faster"
+$ step "Still copying"
+$ task_done Photos
+$ info "between the last task and the end"
+$ tasks_done
+$ ok "after the end"
+!· Scan\e[K
+!⠋ Photos  ██████░░░░░░░░░░░░░░░░░░  25%  1/4\e[K
+!  Backup  ███░░░░░░░░░░░░░░░░░░░░░  12%  0/2 <T>\e[K
+!\e[J\e[3A\e[J▲ The phone is locked
+!· Scan\e[K
+!⠋ Photos  ██████░░░░░░░░░░░░░░░░░░  25%  1/4\e[K
+!  Backup  ███░░░░░░░░░░░░░░░░░░░░░  12%  0/2 <T>\e[K
+!\e[J\e[3A· Scan\e[K
+!⠙ Photos  ████████████░░░░░░░░░░░░  50%  2/4\e[K
+!  Backup  ██████░░░░░░░░░░░░░░░░░░  25%  0/2 <T>\e[K
+!\e[J\e[3A\e[JUnlock it to go faster
+!· Scan\e[K
+!⠙ Photos  ████████████░░░░░░░░░░░░  50%  2/4\e[K
+!  Backup  ██████░░░░░░░░░░░░░░░░░░  25%  0/2 <T>\e[K
+!\e[J\e[3A\e[J▸ Still copying
+!· Scan\e[K
+!⠙ Photos  ████████████░░░░░░░░░░░░  50%  2/4\e[K
+!  Backup  ██████░░░░░░░░░░░░░░░░░░  25%  0/2 <T>\e[K
+!\e[J\e[3A· Scan\e[K
+!✓ Photos  <T>\e[K
+!  Backup  ████████████░░░░░░░░░░░░  50%  1/2 <T>\e[K
+!\e[J\e[3A\e[J● between the last task and the end
+!· Scan\e[K
+!✓ Photos  <T>\e[K
+!  Backup  ████████████░░░░░░░░░░░░  50%  1/2 <T>\e[K
+!\e[J\e[3A· Scan\e[K
+!✓ Photos  <T>\e[K
+!\e[J● Backup (1/2, <T>)
+!✓ after the end
+
+[plain] tasks: a status line among the tasks
+$ tasks Backup Scan Photos
+$ task Photos 1 4
+$ warn "The phone is locked"
+$ task_done Photos
+$ tasks_done
+![WARN] The phone is locked
+![OK] Photos (<T>)
+!Backup: 50% (1/2)
+![INFO] Backup (1/2, <T>)
+
+[agent] tasks: a status line among the tasks
+$ tasks Backup Scan Photos
+$ task Photos 1 4
+$ warn "The phone is locked"
+$ task_done Photos
+$ tasks_done
+!warn: The phone is locked
+!Backup: 1/2 <T>
+
+[rich] tasks: a status line in colour above the tasks
+$ tasks Backup Scan
+$ task Scan 1 2
+$ error "No space left"
+$ tasks_done
+!\e[36m⠋\e[0m Scan    \e[32m████████████\e[0m\e[2m░░░░░░░░░░░░\e[0m  50%  \e[2m1/2\e[0m\e[K
+!  \e[1mBackup\e[0m  \e[32m████████████\e[0m\e[2m░░░░░░░░░░░░\e[0m  50%  \e[2m0/1 <T>\e[0m\e[K
+!\e[J\e[2A\e[J\e[31m✗\e[0m No space left
+!\e[36m⠋\e[0m Scan    \e[32m████████████\e[0m\e[2m░░░░░░░░░░░░\e[0m  50%  \e[2m1/2\e[0m\e[K
+!  \e[1mBackup\e[0m  \e[32m████████████\e[0m\e[2m░░░░░░░░░░░░\e[0m  50%  \e[2m0/1 <T>\e[0m\e[K
+!\e[J\e[2A\e[36m·\e[0m Scan    \e[32m████████████\e[0m\e[2m░░░░░░░░░░░░\e[0m  50%  \e[2m1/2\e[0m\e[K
+!\e[J\e[34m●\e[0m Backup (0/1, <T>)
+
+[rich] progress: a status line goes above the bar
+% NO_COLOR=1
+$ progress 1 4 copy
+$ warn careful
+$ progress 2 4 copy
+$ hint "a tip"
+$ progress_done
+$ info after
+!\r⠋ copy ██████░░░░░░░░░░░░░░░░░░  25% 1/4 <T>\e[K\r\e[K▲ careful
+!\r⠋ copy ██████░░░░░░░░░░░░░░░░░░  25% 1/4 <T>\e[K\r⠙ copy ████████████░░░░░░░░░░░░  50% 2/4 <T>\e[K\r\e[Ka tip
+!\r⠙ copy ████████████░░░░░░░░░░░░  50% 2/4 <T>\e[K\r\e[K● copy (2/4, <T>)
+!● after
+
+[plain] progress: a status line among the lines of the bar
+$ progress 1 4 copy
+$ warn careful
+$ progress 4 4 copy
+!copy: 25% (1/4)
+![WARN] careful
+!copy: 100% (4/4)

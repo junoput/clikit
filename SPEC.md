@@ -288,6 +288,17 @@ it stopped.
 
 `tasks_done` has status 1 when a task failed. Naming a new group ends the one before.
 
+**Not too often.** At a terminal (standard error is one), a call that only moves a running task
+on redraws at most every 80 ms; a task that starts or ends is always drawn. Without a terminal
+every call draws. The terminal's width is asked for at most once a second.
+
+#### Status lines while something is redrawn
+
+A status line (`info`, `ok`, `warn`, `error`, `debug`, `hint`, `step`) printed in rich mode
+while a group of tasks or a progress bar is on the screen goes above it: the drawing is erased
+(tasks: cursor up by its lines, clear to the end of the screen; a bar: carriage return, clear to
+the end of the line), the line is printed, and the drawing is repeated as it was.
+
 `spin LABEL CMD` runs a command with its output hidden.
 
 - While it runs: a spinner with the label and the seconds so far (rich), `[....] LABEL` (plain),
@@ -310,7 +321,9 @@ it stopped.
 - `browse`: a tree to walk through; see below.
 - `confirm`: `? QUESTION [Y/n]`, then `y`, `n`, Escape (no) or Enter (the default, if there is one).
 - `input`: `? QUESTION (default)`, then a line typed in the editor described below. Escape cancels.
-- `password`: the same question; what is typed is not shown.
+- `password`: the same question; what is typed is not shown. It is asked this way whenever
+  standard input is a terminal, in plain mode too: in `tool export | tar x` the output is a
+  pipe, and a person still types the password. Only agent mode never reads a terminal.
 
 **The line editor** is behind `input` and behind the interactive prompt of an application.
 

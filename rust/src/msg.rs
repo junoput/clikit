@@ -33,7 +33,7 @@ pub(crate) fn msg(level: Level, text: &str) {
         Mode::Plain => format!("[{tag}] {text}\n"),
         Mode::Rich => format!("{}{glyph}{} {text}\n", t.c(color), t.c(RESET)),
     };
-    ctx::err(&line);
+    ctx::status(&line);
 }
 
 /// Something worth knowing.
@@ -73,7 +73,7 @@ pub fn hint(text: impl Display) {
     if t.mode == Mode::Agent || ctx::flag("CLI_QUIET") {
         return;
     }
-    ctx::err(&format!("{}{text}{}\n", t.c(DIM), t.c(RESET)));
+    ctx::status(&format!("{}{text}{}\n", t.c(DIM), t.c(RESET)));
 }
 
 /// Start a numbered run of [`step`] lines: `[1/3]`, `[2/3]`, ...
@@ -103,5 +103,5 @@ pub fn step(text: impl Display) {
             format!("{}{}{lead}{}{}{text}{}\n", t.c(BOLD), t.c(CYAN), t.c(RESET), t.c(BOLD), t.c(RESET))
         }
     };
-    ctx::err(&line);
+    ctx::status(&line);
 }

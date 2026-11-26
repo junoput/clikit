@@ -95,6 +95,7 @@ each call in each mode.
 | `Browse::new().ask_rows(question, &rows)` | `cli_browse -l` | the same over a list of paths |
 | `wizard(&mut state, &[steps])` | `cli_wizard` | ask questions in order; Escape goes back one |
 | `mode()`, `is_agent()`, `set_mode(Mode)`, `auto_mode()`, `set_color(bool)` | `cli_mode` | the mode |
+| `mode_guard()` | | puts the mode back when dropped: one line of your own prompt with `--agent` stays one line |
 | `has(program)`, `require(&programs)` | `cli_has`, `cli_require` | is a program installed |
 | `split_words(line)` | | split a line the way a shell would |
 
@@ -259,7 +260,9 @@ use `clikit::testing::print` for output a test needs to see.
 - Text given to `boxed`, `table`, `timeline` and `tree` must be plain. Wide characters (CJK, emoji) count as
   one column.
 - `tree_dir` does not follow symbolic links to directories; `browse` opens them when asked.
-- While a `Progress` or a `Tasks` group is on the screen, other output lands in the middle of it.
+- While a `Progress` or a `Tasks` group is on the screen, what this crate prints (status lines
+  and content) goes above it. What you print yourself, or a child process prints, lands in the
+  middle of it.
 - A timeline does not know time zones: the zone in `2026-03-14T09:30+01:00` is read and ignored.
 - In agent mode a prompt reads standard input on a helper thread, which may take one line more
   than was asked for. Do not mix agent-mode prompts with your own reading of standard input.

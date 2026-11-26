@@ -35,6 +35,7 @@ _CLI_R='' _CLI_KEY=''
 _CLI_APP=${0##*/} _CLI_APP_DESC='' _CLI_APP_VER=''
 _CLI_CMDS='' _CLI_OPTS='' _CLI_SYN='' _CLI_EX='' _CLI_CUR=@app
 _CLI_STEP_I=0 _CLI_STEP_N=0 _CLI_P_T0=''
+_CLI_W='' _CLI_W_AT='' _CLI_LIVE_CLEAR='' _CLI_LIVE_TEXT='' _CLI_K_AT=0
 _CLI_K_T0='' _CLI_K_TITLE='' _CLI_K_N=0 _CLI_K_DRAWN=0 _CLI_K_FRAME=0 _CLI_K_Q=0 _CLI_K_DONE=0 _CLI_K_FAILED=0
 _CLI_HIST='' _CLI_HIST_N=0 _CLI_EDIT_LIST='' _CLI_STTY='' _CLI_TRAP='' _CLI_UNREAD=''
 _CLI_F_N=0 _CLI_F_TOP=0 _CLI_F_FS=0 _CLI_F_DOT=0 _CLI_F_DIRS=0 _CLI_V_N=0
@@ -146,7 +147,14 @@ _cli_trim() {  # TEXT
 
 _cli_width() {  # terminal width
   _CLI_R=${COLUMNS:-}
-  case $_CLI_R in ''|*[!0-9]*) _CLI_R=$(tput cols 2>/dev/null) || _CLI_R=80;; esac
+  case $_CLI_R in
+    ''|*[!0-9]*)  # asking means running tput: once a second is enough, and a progress bar asks often
+      if [ "$_CLI_W_AT" != "${SECONDS:-}" ]; then
+        _CLI_W=$(tput cols 2>/dev/null) || _CLI_W=80
+        _CLI_W_AT=${SECONDS:-}
+      fi
+      _CLI_R=$_CLI_W;;
+  esac
   case $_CLI_R in ''|*[!0-9]*|0) _CLI_R=80;; esac
 }
 
@@ -186,6 +194,11 @@ _cli_tty() {  # can we run a key-driven prompt?
 
 # ── messages (stderr) ────────────────────────────────────────────────────────
 
+# What is being redrawn in place, a block of tasks or a progress bar, is kept as the text that
+# erases it and the text that draws it again, so that a status line can go above it.
+_cli_live_off() { if [ -n "$_CLI_LIVE_TEXT" ]; then printf '%s' "$_CLI_LIVE_CLEAR" >&2; fi; }
+_cli_live_on() { if [ -n "$_CLI_LIVE_TEXT" ]; then printf '%s' "$_CLI_LIVE_TEXT" >&2; fi; }
+
 _cli_msg() {  # LEVEL TEXT
   local level=$1 text=$2 tag='' color='' glyph=''
   case $level in
@@ -198,7 +211,7 @@ _cli_msg() {  # LEVEL TEXT
   case $_CLI_MODE in
     agent) if [ "$level" = info ]; then printf '%s\n' "$text"; else printf '%s: %s\n' "$level" "$text"; fi;;
     plain) printf '[%s] %s\n' "$tag" "$text";;
-    *)     printf '%s%s%s %s\n' "$color" "$glyph" "$CLI_RESET" "$text";;
+    *)     _cli_live_off; printf '%s%s%s %s\n' "$color" "$glyph" "$CLI_RESET" "$text"; _cli_live_on;;
   esac >&2
 }
 
@@ -224,7 +237,9 @@ cli_die() {  # cli_die TEXT [EXIT_CODE]   print an error and exit
 }
 cli_hint() {  # cli_hint TEXT   a tip for humans; agents never see it
   if [ "$_CLI_MODE" = agent ] || [ -n "${CLI_QUIET:-}" ]; then return 0; fi
+  _cli_live_off
   printf '%s%s%s\n' "$CLI_DIM" "$*" "$CLI_RESET" >&2
+  _cli_live_on
 }
 
 cli_steps() {  # cli_steps TOTAL   start a numbered run of cli_step lines
@@ -239,7 +254,9 @@ cli_step() {  # cli_step TEXT   "[2/5] TEXT" after cli_steps 5, otherwise "▸ T
   case $_CLI_MODE in
     agent) printf '%s%s\n' "$pre" "$*";;
     plain) printf '==> %s%s\n' "$pre" "$*";;
-    *)     printf '%s%s%s%s%s%s\n' "$CLI_BOLD$CLI_CYAN" "${pre:-$_CLI_G_STEP }" "$CLI_RESET" "$CLI_BOLD" "$*" "$CLI_RESET";;
+    *)     _cli_live_off
+           printf '%s%s%s%s%s%s\n' "$CLI_BOLD$CLI_CYAN" "${pre:-$_CLI_G_STEP }" "$CLI_RESET" "$CLI_BOLD" "$*" "$CLI_RESET"
+           _cli_live_on;;
   esac >&2
 }
 
@@ -1182,8 +1199,10 @@ cli_progress() {  # cli_progress CURRENT TOTAL [LABEL]   call repeatedly; finish
            # each update. The count is padded so that the line does not shift as it grows.
            q=$((_CLI_P_N % ${#_CLI_G_SPIN})); _CLI_P_N=$((_CLI_P_N + 1))
            _cli_since "$_CLI_P_T0"
-           printf '\r%s%s%s %s%s %3d%% %s%*d/%d %s%s\033[K' "$CLI_CYAN" "${_CLI_G_SPIN:$q:1}" "$CLI_RESET" \
-             "${label:+$label }" "$bar" "$pct" "$CLI_DIM" "${#total}" "$cur" "$total" "$_CLI_R" "$CLI_RESET" >&2;;
+           printf -v _CLI_LIVE_TEXT '\r%s%s%s %s%s %3d%% %s%*d/%d %s%s\033[K' "$CLI_CYAN" "${_CLI_G_SPIN:$q:1}" "$CLI_RESET" \
+             "${label:+$label }" "$bar" "$pct" "$CLI_DIM" "${#total}" "$cur" "$total" "$_CLI_R" "$CLI_RESET"
+           _CLI_LIVE_CLEAR="$_CLI_CR${_CLI_ESC}[K"
+           printf '%s' "$_CLI_LIVE_TEXT" >&2;;
   esac
   if [ "$cur" -ge "$total" ]; then cli_progress_done; fi
   return 0
@@ -1192,6 +1211,7 @@ cli_progress() {  # cli_progress CURRENT TOTAL [LABEL]   call repeatedly; finish
 cli_progress_done() {  # cli_progress_done   end the bar early (a full bar ends itself)
   local text level=ok
   if [ -z "$_CLI_P_T0" ]; then return 0; fi
+  _CLI_LIVE_TEXT=''
   case $_CLI_MODE in
     agent) _cli_since "$_CLI_P_T0"
            printf '%s%d/%d %s\n' "${_CLI_P_LABEL:+$_CLI_P_LABEL: }" "$_CLI_P_CUR" "$_CLI_P_TOTAL" "$_CLI_R" >&2;;
@@ -1252,10 +1272,11 @@ cli_task() {  # cli_task NAME [CURRENT TOTAL]   a task of the group is running; 
     d|f) return 0;;  # what has ended stays ended
     w) _cli_now; eval "_cli_k0$i=$_CLI_R _cli_ks$i=r";;
   esac
+  if [ "$s" = w ]; then s=now; else s=soon; fi
   if [ "$total" -gt 0 ] && [ "$cur" -gt "$total" ]; then cur=$total; fi
   eval "_cli_kc$i=$cur _cli_kt$i=$total"
   if [ "$total" -gt 0 ] && [ "$cur" -ge "$total" ]; then _cli_task_end "$i" d ''; return 0; fi
-  _cli_tasks_draw
+  _cli_tasks_draw "$s"
 }
 
 cli_task_done() {  # cli_task_done NAME   a task of the group is done
@@ -1281,13 +1302,14 @@ _cli_task_end() {  # NUMBER d|f TEXT
       if [ -n "$3" ]; then _cli_msg error "$name: $3"; else _cli_msg error "$name failed"; fi
     fi
   fi
-  _cli_tasks_draw
+  _cli_tasks_draw now
 }
 
-_cli_tasks_draw() {  # [end]   show the group as it stands; with "end", what stays on the screen
-  local end=${1:-} i=0 n=$_CLI_K_N s='' w=0 c=0 t=0 t0=0 x='' name='' sum=0 W=0 pts=0 pct=0 q=0 waiting=0
+_cli_tasks_draw() {  # now|soon|end   show the group as it stands: at once, not too often, or for the last time
+  local end='' how=$1 i=0 n=$_CLI_K_N s='' w=0 c=0 t=0 t0=0 x='' name='' sum=0 W=0 pts=0 pct=0 q=0 waiting=0
   local width=0 nw=${#_CLI_K_TITLE} cw=0 bw=0 fill=0 bar='' line='' out='' lines=0 many=0 frame='' p='' page=${CLI_PAGE:-10}
   _CLI_K_DONE=0 _CLI_K_FAILED=0
+  if [ "$how" = end ]; then end=end; fi
   cw=$((${#n} * 2 + 8))
   while [ "$i" -lt "$n" ]; do
     i=$((i + 1)); eval "s=\$_cli_ks$i w=\$_cli_kw$i c=\$_cli_kc$i t=\$_cli_kt$i name=\$_cli_kn$i"
@@ -1314,6 +1336,14 @@ _cli_tasks_draw() {  # [end]   show the group as it stands; with "end", what sta
            return 0;;
   esac
 
+  # A backup of fifty thousand files would otherwise draw fifty thousand times: at a terminal, a
+  # task that only moved on is drawn every 80ms at most (where the shell has a clock that fine).
+  # Without a terminal (a test, a recording) every step is drawn.
+  if [ -n "${EPOCHREALTIME:-}" ]; then
+    _cli_now
+    if [ "$how" = soon ] && [ -t 2 ] && [ $((_CLI_R - _CLI_K_AT)) -lt 80 ]; then return 0; fi
+    _CLI_K_AT=$_CLI_R
+  fi
   _cli_width; width=$_CLI_R
   q=$((width / 3)); if [ "$q" -lt 8 ]; then q=8; fi
   if [ "$nw" -gt "$q" ]; then nw=$q; fi
@@ -1359,6 +1389,10 @@ _cli_tasks_draw() {  # [end]   show the group as it stands; with "end", what sta
   if [ "$_CLI_K_DRAWN" -gt 0 ]; then printf '\033[%dA' "$_CLI_K_DRAWN" >&2; fi
   printf '%s\033[J' "$out" >&2
   _CLI_K_DRAWN=$lines
+  _CLI_LIVE_TEXT=''
+  if [ -z "$end" ] && [ "$lines" -gt 0 ]; then
+    _CLI_LIVE_CLEAR="${_CLI_ESC}[${lines}A${_CLI_ESC}[J" _CLI_LIVE_TEXT="$out${_CLI_ESC}[J"
+  fi
 }
 
 cli_tasks_done() {  # cli_tasks_done   end the group: one line for the whole; status 1 when a task failed
@@ -1730,7 +1764,9 @@ cli_input() {  # cli_input [-c CANDIDATE]... QUESTION [DEFAULT]   → the answer
 
 cli_password() {  # cli_password QUESTION   → the answer on stdout; typing is hidden
   local q=$1 ans=''
-  if _cli_tty; then
+  # At a terminal the typing is hidden whatever the mode: in `tool export | tar x` the output
+  # is a pipe, so the mode is plain, and a person is still typing the password.
+  if _cli_tty || { [ -t 0 ] && [ "$_CLI_MODE" != agent ]; }; then
     printf '%s?%s %s ' "$CLI_CYAN" "$CLI_RESET" "$q" >&2
     _cli_raw_on
     while _cli_key; do
