@@ -329,6 +329,7 @@ fn call(words: &[String], running: &mut Running) -> i32 {
         "password" => return prompt_status(clikit::password(&args[0]), |answer| println_out(&answer)),
         "pause" => clikit::pause(args.first().map(String::as_str)),
         "mode" => println_out(clikit::mode().as_str()),
+        "width" => println_out(&clikit::width().to_string()),
         "is_agent" => return i32::from(!clikit::is_agent()),
         "has" => return i32::from(!clikit::has(&args[0])),
         other => panic!("the conformance driver does not know the function '{other}'"),

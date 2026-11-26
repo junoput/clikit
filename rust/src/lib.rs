@@ -43,7 +43,7 @@ pub mod testing;
 #[cfg(feature = "clap")]
 pub mod clap;
 
-pub use ctx::{auto_mode, is_agent, mode, mode_guard, set_color, set_mode, Mode, ModeGuard};
+pub use ctx::{auto_mode, color, is_agent, mode, mode_guard, set_color, set_mode, unicode, width, Mode, ModeGuard};
 pub use layout::{boxed, header, hr, kv, list, list_numbered, nl, style, table, Table};
 pub use msg::{debug, die, error, hint, info, ok, step, steps, warn};
 pub use progress::{exec, exit_code, has, require, spin, spin_command, Progress};

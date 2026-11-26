@@ -261,6 +261,18 @@ pub fn is_agent() -> bool {
     theme().mode == Mode::Agent
 }
 
+/// True when output is coloured: rich mode, and colours not turned off (`NO_COLOR`,
+/// `--no-color`, [`set_color`]). For a program that draws something of its own.
+pub fn color() -> bool {
+    theme().color
+}
+
+/// True when Unicode symbols are used: rich mode with a UTF-8 locale. Otherwise the ASCII
+/// stand-ins are (`+` for `✓`, `#` for `█`).
+pub fn unicode() -> bool {
+    theme().utf
+}
+
 /// Force a mode for the rest of the run, whatever the environment says.
 pub fn set_mode(mode: Mode) {
     force(|f| f.mode = Some(mode));
@@ -396,8 +408,9 @@ pub(crate) fn stderr_tty() -> bool {
     !in_scope() && io::stderr().is_terminal()
 }
 
-/// The terminal width in columns.
-pub(crate) fn width() -> usize {
+/// The terminal's width in columns: `COLUMNS` when it is set, otherwise what the terminal says
+/// (asked at most once a second), otherwise 80.
+pub fn width() -> usize {
     if let Some(columns) = env("COLUMNS").and_then(|c| c.parse::<usize>().ok()).filter(|c| *c > 0) {
         return columns;
     }

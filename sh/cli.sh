@@ -104,6 +104,10 @@ cli_mode() {  # cli_mode [auto|rich|plain|agent]   print the mode, or set it
   _cli_setup
 }
 
+cli_width() {  # cli_width   the terminal's width in columns
+  _cli_width; printf '%s\n' "$_CLI_R"
+}
+
 cli_is_agent() {  # cli_is_agent   true when output is being read by an LLM
   [ "$_CLI_MODE" = agent ]
 }

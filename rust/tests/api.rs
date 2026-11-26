@@ -90,6 +90,16 @@ fn status_lines_and_content_go_above_what_is_redrawn() {
 }
 
 #[test]
+fn what_the_theme_decided_can_be_asked() {
+    let utf = |mode| Session::new(mode).env("LANG", "en_US.UTF-8").env("COLUMNS", "42");
+    utf(Mode::Rich).run(|| assert_eq!((clikit::color(), clikit::unicode(), clikit::width()), (true, true, 42)));
+    utf(Mode::Rich).env("NO_COLOR", "1").run(|| assert_eq!((clikit::color(), clikit::unicode()), (false, true)));
+    utf(Mode::Plain).run(|| assert_eq!((clikit::color(), clikit::unicode()), (false, false)));
+    Session::new(Mode::Rich).env("LANG", "C").run(|| assert_eq!((clikit::color(), clikit::unicode()), (true, false)));
+    Session::new(Mode::Agent).run(|| assert_eq!(clikit::width(), 80));
+}
+
+#[test]
 fn tasks_on_threads() {
     let run = capture(Mode::Agent, || {
         let job = clikit::Tasks::new("Job");

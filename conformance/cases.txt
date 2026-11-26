@@ -3853,3 +3853,12 @@ $ progress 4 4 copy
 !copy: 25% (1/4)
 ![WARN] careful
 !copy: 100% (4/4)
+
+[plain] width
+$ width
+|80
+
+[rich] width follows COLUMNS
+% COLUMNS=42
+$ width
+|42

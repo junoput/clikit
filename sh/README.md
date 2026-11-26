@@ -328,7 +328,7 @@ what was chosen. Escape on the first question ends the wizard.
 
 Ctrl-C during any of these leaves the terminal the way it was.
 
-**Other**: `cli_has CMD`, `cli_require CMD...`, `cli_mode`, `cli_is_agent`, and
+**Other**: `cli_has CMD`, `cli_require CMD...`, `cli_mode`, `cli_is_agent`, `cli_width` (the terminal's columns), and
 `cli_legacy_aliases`, which defines the function names of the old `sh-utils` (`success`, `error`,
 `log_info`, `command_exists`, ...). Unlike the old ones, messages go to stderr.
 
