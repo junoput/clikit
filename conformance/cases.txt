@@ -1,0 +1,3759 @@
+# Conformance cases: what every implementation must print, byte for byte.
+# The format is described in SPEC.md ("Conformance"). In short:
+#
+#   [mode] name          starts a case; mode is rich, plain or agent
+#   % NAME=value         an environment variable for the case
+#   $ function args      a call (shell quoting); several calls run in one process
+#   < text               a line of standard input ("<" alone is an empty line)
+#   |text                an expected line of standard output
+#   !text                an expected line of standard error
+#   = N                  the expected exit status of the last call (default 0)
+#
+# Escapes in input and expected lines: \e escape, \t tab, \r carriage return, \s space,
+# \b backspace (the DEL character).
+# An expected line ending in \c has no newline after it.
+# <T> stands for any duration (12ms, 4.2s, 3s).
+# Every case runs with COLUMNS=80, LANG=en_US.UTF-8 and no terminal.
+# The working directory is this one, so that "files" names the directory next to this file.
+
+[plain] info
+$ info hello world
+![INFO] hello world
+
+[agent] info
+$ info hello world
+!hello world
+
+[rich] info
+$ info hello world
+!\e[34m●\e[0m hello world
+
+[plain] ok
+$ ok done
+![OK] done
+
+[agent] ok
+$ ok done
+!ok: done
+
+[rich] ok
+$ ok done
+!\e[32m✓\e[0m done
+
+[plain] success is ok
+$ success done
+![OK] done
+
+[plain] warn
+$ warn careful
+![WARN] careful
+
+[agent] warn
+$ warn careful
+!warn: careful
+
+[rich] warn
+$ warn careful
+!\e[33m▲\e[0m careful
+
+[plain] error
+$ error broke
+![ERROR] broke
+
+[agent] error
+$ error broke
+!error: broke
+
+[rich] error
+$ error broke
+!\e[31m✗\e[0m broke
+
+[plain] debug is hidden
+$ debug secret
+
+[plain] debug shows with CLI_DEBUG
+% CLI_DEBUG=1
+$ debug detail
+![DEBUG] detail
+
+[agent] debug shows with CLI_DEBUG
+% CLI_DEBUG=1
+$ debug detail
+!debug: detail
+
+[rich] debug shows with CLI_DEBUG
+% CLI_DEBUG=1
+$ debug detail
+!\e[90m·\e[0m detail
+
+[plain] hint
+$ hint "a tip"
+!a tip
+
+[agent] hint
+$ hint "a tip"
+
+[rich] hint
+$ hint "a tip"
+!\e[2ma tip\e[0m
+
+[plain] quiet drops info, ok, hint, step
+% CLI_QUIET=1
+$ info a
+$ ok b
+$ hint c
+$ step d
+$ warn e
+$ error f
+![WARN] e
+![ERROR] f
+
+[agent] quiet drops info, ok, hint, step
+% CLI_QUIET=1
+$ info a
+$ ok b
+$ hint c
+$ step d
+$ warn e
+$ error f
+!warn: e
+!error: f
+
+[plain] numbered steps
+$ steps 2
+$ step Fetch
+$ step Build
+!==> [1/2] Fetch
+!==> [2/2] Build
+
+[agent] numbered steps
+$ steps 2
+$ step Fetch
+$ step Build
+![1/2] Fetch
+![2/2] Build
+
+[rich] numbered steps
+$ steps 2
+$ step Fetch
+$ step Build
+!\e[1m\e[36m[1/2] \e[0m\e[1mFetch\e[0m
+!\e[1m\e[36m[2/2] \e[0m\e[1mBuild\e[0m
+
+[plain] step without a total
+$ step Fetch
+!==> Fetch
+
+[agent] step without a total
+$ step Fetch
+!Fetch
+
+[rich] step without a total
+$ step Fetch
+!\e[1m\e[36m▸ \e[0m\e[1mFetch\e[0m
+
+[plain] exec
+$ exec echo hi
+|hi
+!$ echo hi
+
+[agent] exec
+$ exec echo hi
+|hi
+!$ echo hi
+
+[rich] exec
+$ exec echo hi
+|hi
+!\e[2m$ echo hi\e[0m
+
+[plain] style
+$ style "bold red" hi there
+|hi there
+
+[agent] style
+$ style "bold red" hi there
+|hi there
+
+[rich] style
+$ style "bold red" hi there
+|\e[1m\e[31mhi there\e[0m
+
+[rich] style: every name
+$ style "dim italic underline inverse green bg-blue" x
+|\e[2m\e[3m\e[4m\e[7m\e[32m\e[44mx\e[0m
+
+[rich] style: unknown names are ignored
+$ style "nope underline" x
+|\e[4mx\e[0m
+
+[rich] NO_COLOR keeps symbols, drops colour
+% NO_COLOR=1
+$ ok done
+$ style red x
+$ list a
+|x
+|  • a
+!✓ done
+
+[rich] without UTF-8 the symbols are ASCII
+% LANG=C
+% LC_ALL=C
+$ ok done
+$ error broke
+$ list a
+$ box -t T x
+$ step go
+|  \e[36m-\e[0m a
+|\e[90m+- \e[0m\e[1mT\e[0m\e[90m -+\e[0m
+|\e[90m|\e[0m x   \e[90m|\e[0m
+|\e[90m+-----+\e[0m
+!\e[32m+\e[0m done
+!\e[31mx\e[0m broke
+!\e[1m\e[36m> \e[0m\e[1mgo\e[0m
+
+[plain] header
+$ header Two words
+|
+|== Two words ==
+
+[agent] header
+$ header Two words
+|# Two words
+
+[rich] header
+$ header Two words
+|
+|\e[1mTwo words\e[0m
+|\e[2m─────────\e[0m
+
+[plain] hr
+$ hr
+|--------------------------------------------------------------------------------
+
+[agent] hr
+$ hr
+
+[rich] hr
+$ hr
+|\e[2m────────────────────────────────────────────────────────────────────────────────\e[0m
+
+[plain] nl
+$ nl
+|
+
+[agent] nl
+$ nl
+
+[rich] nl
+$ nl
+|
+
+[plain] box with a title
+$ box -t Note "Plain text in a frame." short
+|+- Note -----------------+
+|| Plain text in a frame. |
+|| short                  |
+|+------------------------+
+
+[agent] box with a title
+$ box -t Note "Plain text in a frame." short
+|Note:
+|Plain text in a frame.
+|short
+
+[rich] box with a title
+$ box -t Note "Plain text in a frame." short
+|\e[90m╭─ \e[0m\e[1mNote\e[0m\e[90m ─────────────────╮\e[0m
+|\e[90m│\e[0m Plain text in a frame. \e[90m│\e[0m
+|\e[90m│\e[0m short                  \e[90m│\e[0m
+|\e[90m╰────────────────────────╯\e[0m
+
+[plain] box without a title
+$ box ab
+|+----+
+|| ab |
+|+----+
+
+[agent] box without a title
+$ box ab
+|ab
+
+[rich] box without a title
+$ box ab
+|\e[90m╭────╮\e[0m
+|\e[90m│\e[0m ab \e[90m│\e[0m
+|\e[90m╰────╯\e[0m
+
+[plain] box: a long title widens it
+$ box -t "A long title" x
+|+- A long title -+
+|| x              |
+|+----------------+
+
+[plain] list
+$ list apples "b c"
+|  - apples
+|  - b c
+
+[agent] list
+$ list apples "b c"
+|- apples
+|- b c
+
+[rich] list
+$ list apples "b c"
+|  \e[36m•\e[0m apples
+|  \e[36m•\e[0m b c
+
+[plain] numbered list
+$ list -n a b
+|  1. a
+|  2. b
+
+[agent] numbered list
+$ list -n a b
+|1. a
+|2. b
+
+[rich] numbered list
+$ list -n a b
+|  \e[36m1.\e[0m a
+|  \e[36m2.\e[0m b
+
+[plain] numbered list aligns
+$ list -n a b c d e f g h i j
+|   1. a
+|   2. b
+|   3. c
+|   4. d
+|   5. e
+|   6. f
+|   7. g
+|   8. h
+|   9. i
+|  10. j
+
+[plain] kv
+$ kv host example.org port 443
+|  host: example.org
+|  port: 443
+
+[agent] kv
+$ kv host example.org port 443
+|host: example.org
+|port: 443
+
+[rich] kv
+$ kv host example.org port 443
+|  \e[2mhost:\e[0m example.org
+|  \e[2mport:\e[0m 443
+
+[plain] table
+$ table "Name | Role | Since" "Ana | dev | 2019" "Björn | ops | 2021"
+|  Name   Role  Since
+|  -----  ----  -----
+|  Ana    dev    2019
+|  Björn  ops    2021
+
+[agent] table
+$ table "Name | Role | Since" "Ana | dev | 2019" "Björn | ops | 2021"
+|Name\tRole\tSince
+|Ana\tdev\t2019
+|Björn\tops\t2021
+
+[rich] table
+$ table "Name | Role | Since" "Ana | dev | 2019" "Björn | ops | 2021"
+|  \e[1mName   Role  Since\e[0m
+|  \e[2m─────  ────  ─────\e[0m
+|  Ana    dev    2019
+|  Björn  ops    2021
+
+[plain] table: another separator
+$ table -s , a,b cc,d
+|  a   b
+|  --  -
+|  cc  d
+
+[agent] table: another separator
+$ table -s , a,b cc,d
+|a\tb
+|cc\td
+
+[plain] table: ragged rows
+$ table "a|b|c" d "e|f"
+|  a  b  c
+|  -  -  -
+|  d
+|  e  f
+
+[agent] table: ragged rows
+$ table "a|b|c" d "e|f"
+|a\tb\tc
+|d
+|e\tf
+
+[plain] duration
+$ duration 0
+$ duration 340
+$ duration 999
+$ duration 1000
+$ duration 4250
+$ duration 59999
+$ duration 60000
+$ duration 187000
+$ duration 3725000
+|0ms
+|340ms
+|999ms
+|1.0s
+|4.2s
+|59.9s
+|1m 00s
+|3m 07s
+|1h 02m
+
+[plain] time a command
+$ time nap true
+![INFO] nap: <T>
+
+[agent] time a command
+$ time nap true
+!nap: <T>
+
+[rich] time a command
+$ time nap true
+!\e[34m●\e[0m nap: <T>
+
+[plain] countdown of zero
+$ countdown 0 Wait
+
+[agent] countdown of zero
+$ countdown 0 Wait
+
+[rich] countdown of zero
+$ countdown 0 Wait
+!\r\e[K\c
+
+[plain] progress to the end
+$ progress 0 8 copy
+$ progress 1 8 copy
+$ progress 2 8 copy
+$ progress 4 8 copy
+$ progress 5 8 copy
+$ progress 6 8 copy
+$ progress 8 8 copy
+!copy: 0% (0/8)
+!copy: 25% (2/8)
+!copy: 50% (4/8)
+!copy: 75% (6/8)
+!copy: 100% (8/8)
+
+[agent] progress to the end
+$ progress 0 8 copy
+$ progress 1 8 copy
+$ progress 2 8 copy
+$ progress 4 8 copy
+$ progress 5 8 copy
+$ progress 6 8 copy
+$ progress 8 8 copy
+!copy: 8/8 <T>
+
+[rich] progress to the end
+$ progress 0 8 copy
+$ progress 1 8 copy
+$ progress 2 8 copy
+$ progress 4 8 copy
+$ progress 5 8 copy
+$ progress 6 8 copy
+$ progress 8 8 copy
+!\r\e[36m⠋\e[0m copy \e[32m\e[0m\e[2m░░░░░░░░░░░░░░░░░░░░░░░░\e[0m   0% \e[2m0/8 <T>\e[0m\e[K\r\e[36m⠙\e[0m copy \e[32m███\e[0m\e[2m░░░░░░░░░░░░░░░░░░░░░\e[0m  12% \e[2m1/8 <T>\e[0m\e[K\r\e[36m⠹\e[0m copy \e[32m██████\e[0m\e[2m░░░░░░░░░░░░░░░░░░\e[0m  25% \e[2m2/8 <T>\e[0m\e[K\r\e[36m⠸\e[0m copy \e[32m████████████\e[0m\e[2m░░░░░░░░░░░░\e[0m  50% \e[2m4/8 <T>\e[0m\e[K\r\e[36m⠼\e[0m copy \e[32m███████████████\e[0m\e[2m░░░░░░░░░\e[0m  62% \e[2m5/8 <T>\e[0m\e[K\r\e[36m⠴\e[0m copy \e[32m██████████████████\e[0m\e[2m░░░░░░\e[0m  75% \e[2m6/8 <T>\e[0m\e[K\r\e[36m⠦\e[0m copy \e[32m████████████████████████\e[0m\e[2m\e[0m 100% \e[2m8/8 <T>\e[0m\e[K\r\e[K\e[32m✓\e[0m copy (8/8, <T>)
+
+[plain] progress ended early
+$ progress 1 4 copy
+$ progress 2 4 copy
+$ progress_done
+!copy: 25% (1/4)
+!copy: 50% (2/4)
+
+[agent] progress ended early
+$ progress 1 4 copy
+$ progress 2 4 copy
+$ progress_done
+!copy: 2/4 <T>
+
+[rich] progress ended early
+$ progress 1 4 copy
+$ progress 2 4 copy
+$ progress_done
+!\r\e[36m⠋\e[0m copy \e[32m██████\e[0m\e[2m░░░░░░░░░░░░░░░░░░\e[0m  25% \e[2m1/4 <T>\e[0m\e[K\r\e[36m⠙\e[0m copy \e[32m████████████\e[0m\e[2m░░░░░░░░░░░░\e[0m  50% \e[2m2/4 <T>\e[0m\e[K\r\e[K\e[34m●\e[0m copy (2/4, <T>)
+
+[plain] progress without a label
+$ progress 2 2
+!100% (2/2)
+
+[agent] progress without a label
+$ progress 2 2
+!2/2 <T>
+
+[rich] progress without a label
+$ progress 2 2
+!\r\e[36m⠋\e[0m \e[32m████████████████████████\e[0m\e[2m\e[0m 100% \e[2m2/2 <T>\e[0m\e[K\r\e[K\e[32m✓\e[0m 2/2 (<T>)
+
+[plain] progress past the total
+$ progress 9 4 x
+!x: 100% (4/4)
+
+[agent] progress past the total
+$ progress 9 4 x
+!x: 4/4 <T>
+
+[plain] spin: success
+$ spin build true
+![....] build
+![OK] build (<T>)
+
+[agent] spin: success
+$ spin build true
+!ok: build (<T>)
+
+[agent] spin: output is hidden on success
+$ spin build echo noisy
+!ok: build (<T>)
+
+[plain] spin: failure shows the output
+$ spin build sh -c "echo boom; echo bang; exit 4"
+![....] build
+![ERROR] build failed (exit 4, <T>)
+!  boom
+!  bang
+= 4
+
+[agent] spin: failure shows the output
+$ spin build sh -c "echo boom; echo bang; exit 4"
+!error: build failed (exit 4, <T>)
+!boom
+!bang
+= 4
+
+[agent] spin: an agent gets the last 40 lines
+$ spin big sh -c "seq 1 100; exit 1"
+!error: big failed (exit 1, <T>)
+!(last 40 of 100 lines)
+!61
+!62
+!63
+!64
+!65
+!66
+!67
+!68
+!69
+!70
+!71
+!72
+!73
+!74
+!75
+!76
+!77
+!78
+!79
+!80
+!81
+!82
+!83
+!84
+!85
+!86
+!87
+!88
+!89
+!90
+!91
+!92
+!93
+!94
+!95
+!96
+!97
+!98
+!99
+!100
+= 1
+
+[plain] select by number
+$ select Fruit apple banana cherry
+< 2
+|banana
+!Fruit
+!  1) apple
+!  2) banana
+!  3) cherry
+!choice: 2
+
+[agent] select by number
+$ select Fruit apple banana cherry
+< 2
+|banana
+!Fruit: banana
+
+[plain] select by name
+$ select Fruit apple banana cherry
+< cherry
+|cherry
+!Fruit
+!  1) apple
+!  2) banana
+!  3) cherry
+!choice: cherry
+
+[agent] select by name
+$ select Fruit apple banana cherry
+< cherry
+|cherry
+!Fruit: cherry
+
+[plain] select prefers a name over a number
+$ select N 3 2 1
+< 2
+|2
+!N
+!  1) 3
+!  2) 2
+!  3) 1
+!choice: 2
+
+[plain] select: empty line takes the default
+$ select -d banana Fruit apple banana
+<
+|banana
+!Fruit
+!  1) apple
+!  2) banana
+!choice [banana]: banana
+
+[agent] select: empty line takes the default
+$ select -d banana Fruit apple banana
+<
+|banana
+!Fruit: banana
+
+[plain] select: no input takes the default
+$ select -d banana Fruit apple banana
+|banana
+!Fruit
+!  1) apple
+!  2) banana
+!choice [banana]: banana
+
+[agent] select: no input takes the default
+$ select -d banana Fruit apple banana
+|banana
+!Fruit: banana
+
+[plain] select: no input, no default
+$ select Fruit apple banana
+!Fruit
+!  1) apple
+!  2) banana
+!choice:\s
+![ERROR] input required: Fruit (options: apple | banana). Pipe the answer on stdin.
+= 1
+
+[agent] select: no input, no default
+$ select Fruit apple banana
+!error: input required: Fruit (options: apple | banana). Pipe the answer on stdin.
+= 1
+
+[plain] select: a bad answer
+$ select Fruit apple banana
+< kiwi
+!Fruit
+!  1) apple
+!  2) banana
+!choice: kiwi
+![ERROR] invalid choice 'kiwi' for: Fruit (options: apple | banana)
+= 1
+
+[agent] select: a bad answer
+$ select Fruit apple banana
+< kiwi
+!error: invalid choice 'kiwi' for: Fruit (options: apple | banana)
+= 1
+
+[plain] select: an option with spaces
+$ select Pick a "b c"
+< 2
+|b c
+!Pick
+!  1) a
+!  2) b c
+!choice: 2
+
+[plain] select: no options
+$ select Pick
+![ERROR] Pick: no options to choose from
+= 2
+
+[plain] multiselect by numbers and names
+$ multiselect Fruit apple banana cherry
+< 1, cherry
+|apple
+|cherry
+!Fruit
+!  1) apple
+!  2) banana
+!  3) cherry
+!choice: 1, cherry
+
+[agent] multiselect by numbers and names
+$ multiselect Fruit apple banana cherry
+< 1, cherry
+|apple
+|cherry
+!Fruit: apple, cherry
+
+[plain] multiselect defaults
+$ multiselect -d a -d c Pick a b c
+|a
+|c
+!Pick
+!  1) a
+!  2) b
+!  3) c
+!choice [a, c]: a, c
+
+[agent] multiselect defaults
+$ multiselect -d a -d c Pick a b c
+|a
+|c
+!Pick: a, c
+
+[plain] multiselect: empty line is none
+$ multiselect Pick a b
+<
+!Pick
+!  1) a
+!  2) b
+!choice:\s
+
+[agent] multiselect: empty line is none
+$ multiselect Pick a b
+<
+!Pick:\s
+
+[plain] multiselect: no input, no default
+$ multiselect Pick a b
+!Pick
+!  1) a
+!  2) b
+!choice:\s
+![ERROR] input required: Pick (options: a | b). Pipe the answer on stdin.
+= 1
+
+[agent] multiselect: no input, no default
+$ multiselect Pick a b
+!error: input required: Pick (options: a | b). Pipe the answer on stdin.
+= 1
+
+[plain] confirm yes
+$ confirm Go
+< y
+!Go [y/n] y
+
+[agent] confirm yes
+$ confirm Go
+< y
+!Go y
+
+[plain] confirm no
+$ confirm Go
+< no
+!Go [y/n] n
+= 1
+
+[agent] confirm no
+$ confirm Go
+< no
+!Go n
+= 1
+
+[plain] confirm: default yes
+$ confirm Go y
+!Go [Y/n] y
+
+[agent] confirm: default yes
+$ confirm Go y
+!Go y
+
+[plain] confirm: default no
+$ confirm Go n
+!Go [y/N] n
+= 1
+
+[agent] confirm: default no
+$ confirm Go n
+!Go n
+= 1
+
+[plain] confirm: nobody answered
+$ confirm Go
+!Go [y/n]\s
+![ERROR] input required: Go [y/n]. Pipe y or n on stdin, or set CLI_YES=1.
+= 2
+
+[agent] confirm: nobody answered
+$ confirm Go
+!error: input required: Go [y/n]. Pipe y or n on stdin, or set CLI_YES=1.
+= 2
+
+[plain] confirm: nonsense is no answer
+$ confirm Go
+< maybe
+!Go [y/n]\s
+![ERROR] input required: Go [y/n]. Pipe y or n on stdin, or set CLI_YES=1.
+= 2
+
+[plain] confirm: CLI_YES
+% CLI_YES=1
+$ confirm Go n
+
+[agent] confirm: CLI_YES
+% CLI_YES=1
+$ confirm Go n
+
+[plain] input
+$ input Name
+< ana
+|ana
+!Name: ana
+
+[agent] input
+$ input Name
+< ana
+|ana
+!Name: ana
+
+[plain] input: default
+$ input Name bo
+|bo
+!Name [bo]: bo
+
+[agent] input: default
+$ input Name bo
+|bo
+!Name: bo
+
+[plain] input: nobody answered
+$ input Name
+!Name:\s
+![ERROR] input required: Name. Pipe the answer on stdin.
+= 1
+
+[agent] input: nobody answered
+$ input Name
+!error: input required: Name. Pipe the answer on stdin.
+= 1
+
+[plain] password
+$ password Token
+< s3cret
+|s3cret
+
+[agent] password
+$ password Token
+< s3cret
+|s3cret
+
+[plain] password: nobody answered
+$ password Token
+![ERROR] input required: Token. Pipe the answer on stdin.
+= 1
+
+[agent] password: nobody answered
+$ password Token
+!error: input required: Token. Pipe the answer on stdin.
+= 1
+
+[plain] pause does nothing without a terminal
+$ pause
+
+[agent] pause does nothing without a terminal
+$ pause
+
+[rich] keys: enter takes the first
+% CLI_INTERACTIVE=1
+$ select Fruit apple banana cherry
+<
+|apple
+!\e[36m?\e[0m \e[1mFruit\e[0m  \e[2m↑/↓ move, enter select\e[0m
+!\e[36m❯\e[0m \e[1mapple\e[0m\e[K
+!  banana\e[K
+!  cherry\e[K
+!\e[4A\e[J\e[32m✓\e[0m Fruit \e[2m›\e[0m apple
+
+[rich] keys: arrow down
+% CLI_INTERACTIVE=1
+$ select Fruit apple banana cherry
+< \e[B
+|banana
+!\e[36m?\e[0m \e[1mFruit\e[0m  \e[2m↑/↓ move, enter select\e[0m
+!\e[36m❯\e[0m \e[1mapple\e[0m\e[K
+!  banana\e[K
+!  cherry\e[K
+!\e[3A  apple\e[K
+!\e[36m❯\e[0m \e[1mbanana\e[0m\e[K
+!  cherry\e[K
+!\e[4A\e[J\e[32m✓\e[0m Fruit \e[2m›\e[0m banana
+
+[rich] keys: j j
+% CLI_INTERACTIVE=1
+$ select Fruit apple banana cherry
+< jj
+|cherry
+!\e[36m?\e[0m \e[1mFruit\e[0m  \e[2m↑/↓ move, enter select\e[0m
+!\e[36m❯\e[0m \e[1mapple\e[0m\e[K
+!  banana\e[K
+!  cherry\e[K
+!\e[3A  apple\e[K
+!\e[36m❯\e[0m \e[1mbanana\e[0m\e[K
+!  cherry\e[K
+!\e[3A  apple\e[K
+!  banana\e[K
+!\e[36m❯\e[0m \e[1mcherry\e[0m\e[K
+!\e[4A\e[J\e[32m✓\e[0m Fruit \e[2m›\e[0m cherry
+
+[rich] keys: up wraps around
+% CLI_INTERACTIVE=1
+$ select Fruit apple banana cherry
+< \e[A
+|cherry
+!\e[36m?\e[0m \e[1mFruit\e[0m  \e[2m↑/↓ move, enter select\e[0m
+!\e[36m❯\e[0m \e[1mapple\e[0m\e[K
+!  banana\e[K
+!  cherry\e[K
+!\e[3A  apple\e[K
+!  banana\e[K
+!\e[36m❯\e[0m \e[1mcherry\e[0m\e[K
+!\e[4A\e[J\e[32m✓\e[0m Fruit \e[2m›\e[0m cherry
+
+[rich] keys: starts on the default
+% CLI_INTERACTIVE=1
+$ select -d banana Fruit apple banana cherry
+< k
+|apple
+!\e[36m?\e[0m \e[1mFruit\e[0m  \e[2m↑/↓ move, enter select\e[0m
+!  apple\e[K
+!\e[36m❯\e[0m \e[1mbanana\e[0m\e[K
+!  cherry\e[K
+!\e[3A\e[36m❯\e[0m \e[1mapple\e[0m\e[K
+!  banana\e[K
+!  cherry\e[K
+!\e[4A\e[J\e[32m✓\e[0m Fruit \e[2m›\e[0m apple
+
+[rich] keys: esc cancels
+% CLI_INTERACTIVE=1
+$ select Fruit apple banana
+< \e
+!\e[36m?\e[0m \e[1mFruit\e[0m  \e[2m↑/↓ move, enter select\e[0m
+!\e[36m❯\e[0m \e[1mapple\e[0m\e[K
+!  banana\e[K
+!\e[3A\e[J\e[2m✗ Fruit (cancelled)\e[0m
+= 3
+
+[rich] keys: no input cancels
+% CLI_INTERACTIVE=1
+$ select Fruit apple banana
+!\e[36m?\e[0m \e[1mFruit\e[0m  \e[2m↑/↓ move, enter select\e[0m
+!\e[36m❯\e[0m \e[1mapple\e[0m\e[K
+!  banana\e[K
+!\e[3A\e[J\e[2m✗ Fruit (cancelled)\e[0m
+= 1
+
+[rich] keys: a long list scrolls
+% CLI_INTERACTIVE=1
+% CLI_PAGE=4
+$ select N 1 2 3 4 5 6 7 8 9 10 11 12
+< jjjjjjjjjjj
+|12
+!\e[36m?\e[0m \e[1mN\e[0m  \e[2m↑/↓ move, enter select\e[0m
+!\e[36m❯\e[0m \e[1m1\e[0m\e[K
+!  2\e[K
+!  3\e[K
+!  4\e[K
+!  \e[2m1-4 of 12\e[0m\e[K
+!\e[5A  1\e[K
+!\e[36m❯\e[0m \e[1m2\e[0m\e[K
+!  3\e[K
+!  4\e[K
+!  \e[2m1-4 of 12\e[0m\e[K
+!\e[5A  1\e[K
+!  2\e[K
+!\e[36m❯\e[0m \e[1m3\e[0m\e[K
+!  4\e[K
+!  \e[2m1-4 of 12\e[0m\e[K
+!\e[5A  1\e[K
+!  2\e[K
+!  3\e[K
+!\e[36m❯\e[0m \e[1m4\e[0m\e[K
+!  \e[2m1-4 of 12\e[0m\e[K
+!\e[5A  2\e[K
+!  3\e[K
+!  4\e[K
+!\e[36m❯\e[0m \e[1m5\e[0m\e[K
+!  \e[2m2-5 of 12\e[0m\e[K
+!\e[5A  3\e[K
+!  4\e[K
+!  5\e[K
+!\e[36m❯\e[0m \e[1m6\e[0m\e[K
+!  \e[2m3-6 of 12\e[0m\e[K
+!\e[5A  4\e[K
+!  5\e[K
+!  6\e[K
+!\e[36m❯\e[0m \e[1m7\e[0m\e[K
+!  \e[2m4-7 of 12\e[0m\e[K
+!\e[5A  5\e[K
+!  6\e[K
+!  7\e[K
+!\e[36m❯\e[0m \e[1m8\e[0m\e[K
+!  \e[2m5-8 of 12\e[0m\e[K
+!\e[5A  6\e[K
+!  7\e[K
+!  8\e[K
+!\e[36m❯\e[0m \e[1m9\e[0m\e[K
+!  \e[2m6-9 of 12\e[0m\e[K
+!\e[5A  7\e[K
+!  8\e[K
+!  9\e[K
+!\e[36m❯\e[0m \e[1m10\e[0m\e[K
+!  \e[2m7-10 of 12\e[0m\e[K
+!\e[5A  8\e[K
+!  9\e[K
+!  10\e[K
+!\e[36m❯\e[0m \e[1m11\e[0m\e[K
+!  \e[2m8-11 of 12\e[0m\e[K
+!\e[5A  9\e[K
+!  10\e[K
+!  11\e[K
+!\e[36m❯\e[0m \e[1m12\e[0m\e[K
+!  \e[2m9-12 of 12\e[0m\e[K
+!\e[6A\e[J\e[32m✓\e[0m N \e[2m›\e[0m 12
+
+[rich] keys: multiselect toggles
+% CLI_INTERACTIVE=1
+$ multiselect Fruit apple banana cherry
+< \sjj\s
+|apple
+|cherry
+!\e[36m?\e[0m \e[1mFruit\e[0m  \e[2m↑/↓ move, space toggle, a all, enter confirm\e[0m
+!\e[36m❯\e[0m \e[2m○\e[0m \e[1mapple\e[0m\e[K
+!  \e[2m○\e[0m banana\e[K
+!  \e[2m○\e[0m cherry\e[K
+!\e[3A\e[36m❯\e[0m \e[32m◉\e[0m \e[1mapple\e[0m\e[K
+!  \e[2m○\e[0m banana\e[K
+!  \e[2m○\e[0m cherry\e[K
+!\e[3A  \e[32m◉\e[0m apple\e[K
+!\e[36m❯\e[0m \e[2m○\e[0m \e[1mbanana\e[0m\e[K
+!  \e[2m○\e[0m cherry\e[K
+!\e[3A  \e[32m◉\e[0m apple\e[K
+!  \e[2m○\e[0m banana\e[K
+!\e[36m❯\e[0m \e[2m○\e[0m \e[1mcherry\e[0m\e[K
+!\e[3A  \e[32m◉\e[0m apple\e[K
+!  \e[2m○\e[0m banana\e[K
+!\e[36m❯\e[0m \e[32m◉\e[0m \e[1mcherry\e[0m\e[K
+!\e[4A\e[J\e[32m✓\e[0m Fruit \e[2m›\e[0m apple, cherry
+
+[rich] keys: multiselect, a selects all
+% CLI_INTERACTIVE=1
+$ multiselect Pick a b c
+< a
+|a
+|b
+|c
+!\e[36m?\e[0m \e[1mPick\e[0m  \e[2m↑/↓ move, space toggle, a all, enter confirm\e[0m
+!\e[36m❯\e[0m \e[2m○\e[0m \e[1ma\e[0m\e[K
+!  \e[2m○\e[0m b\e[K
+!  \e[2m○\e[0m c\e[K
+!\e[3A\e[36m❯\e[0m \e[32m◉\e[0m \e[1ma\e[0m\e[K
+!  \e[32m◉\e[0m b\e[K
+!  \e[32m◉\e[0m c\e[K
+!\e[4A\e[J\e[32m✓\e[0m Pick \e[2m›\e[0m a, b, c
+
+[rich] keys: multiselect, default then toggle off
+% CLI_INTERACTIVE=1
+$ multiselect -d b Pick a b
+< j\s
+!\e[36m?\e[0m \e[1mPick\e[0m  \e[2m↑/↓ move, space toggle, a all, enter confirm\e[0m
+!\e[36m❯\e[0m \e[2m○\e[0m \e[1ma\e[0m\e[K
+!  \e[32m◉\e[0m b\e[K
+!\e[2A  \e[2m○\e[0m a\e[K
+!\e[36m❯\e[0m \e[32m◉\e[0m \e[1mb\e[0m\e[K
+!\e[2A  \e[2m○\e[0m a\e[K
+!\e[36m❯\e[0m \e[2m○\e[0m \e[1mb\e[0m\e[K
+!\e[3A\e[J\e[32m✓\e[0m Pick \e[2m›\e[0m (none)
+
+[rich] keys: multiselect, nothing chosen
+% CLI_INTERACTIVE=1
+$ multiselect Pick a b
+<
+!\e[36m?\e[0m \e[1mPick\e[0m  \e[2m↑/↓ move, space toggle, a all, enter confirm\e[0m
+!\e[36m❯\e[0m \e[2m○\e[0m \e[1ma\e[0m\e[K
+!  \e[2m○\e[0m b\e[K
+!\e[3A\e[J\e[32m✓\e[0m Pick \e[2m›\e[0m (none)
+
+[rich] keys: confirm y
+% CLI_INTERACTIVE=1
+$ confirm Go
+< y
+!\e[36m?\e[0m Go \e[2m[y/n]\e[0m yes
+
+[rich] keys: confirm n
+% CLI_INTERACTIVE=1
+$ confirm Go
+< n
+!\e[36m?\e[0m Go \e[2m[y/n]\e[0m no
+= 1
+
+[rich] keys: confirm, enter takes the default
+% CLI_INTERACTIVE=1
+$ confirm Go y
+<
+!\e[36m?\e[0m Go \e[2m[Y/n]\e[0m yes
+
+[rich] keys: confirm, enter without a default waits
+% CLI_INTERACTIVE=1
+$ confirm Go
+<
+<
+< n
+!\e[36m?\e[0m Go \e[2m[y/n]\e[0m no
+= 1
+
+[rich] keys: input
+% CLI_INTERACTIVE=1
+$ input Name bo
+< ana
+|ana
+!\r\e[J\e[36m?\e[0m Name \e[2m(bo)\e[0m \r\e[J\e[36m?\e[0m Name \e[2m(bo)\e[0m a\r\e[J\e[36m?\e[0m Name \e[2m(bo)\e[0m an\r\e[J\e[36m?\e[0m Name \e[2m(bo)\e[0m ana\r\e[J\e[36m?\e[0m Name \e[2m(bo)\e[0m ana
+
+[rich] keys: input, default
+% CLI_INTERACTIVE=1
+$ input Name bo
+<
+|bo
+!\r\e[J\e[36m?\e[0m Name \e[2m(bo)\e[0m \r\e[J\e[36m?\e[0m Name \e[2m(bo)\e[0m\s
+
+[rich] keys: password
+% CLI_INTERACTIVE=1
+$ password Token
+< s3cret
+|s3cret
+!\e[36m?\e[0m Token\s
+
+[plain] mode
+$ mode
+|plain
+
+[agent] mode
+$ mode
+|agent
+
+[rich] mode
+$ mode
+|rich
+
+[plain] is_agent
+$ is_agent
+= 1
+
+[agent] is_agent
+$ is_agent
+
+[rich] is_agent
+$ is_agent
+= 1
+
+[plain] has
+$ has sh
+
+[plain] has not
+$ has no-such-command-xyz
+= 1
+
+[plain] table: numbers align right
+$ table "Item | Qty | Price" "Apple | 3 | 1.20" "Melon | 12 | 10.00" "Fig | 100 | 0.5"
+|  Item   Qty  Price
+|  -----  ---  -----
+|  Apple    3   1.20
+|  Melon   12  10.00
+|  Fig    100    0.5
+
+[agent] table: numbers align right
+$ table "Item | Qty | Price" "Apple | 3 | 1.20" "Melon | 12 | 10.00" "Fig | 100 | 0.5"
+|Item\tQty\tPrice
+|Apple\t3\t1.20
+|Melon\t12\t10.00
+|Fig\t100\t0.5
+
+[rich] table: numbers align right
+$ table "Item | Qty | Price" "Apple | 3 | 1.20" "Melon | 12 | 10.00" "Fig | 100 | 0.5"
+|  \e[1mItem   Qty  Price\e[0m
+|  \e[2m─────  ───  ─────\e[0m
+|  Apple    3   1.20
+|  Melon   12  10.00
+|  Fig    100    0.5
+
+[plain] table: a column with text is not numeric
+$ table "Id|Size" "1|4 MB" "20|-" "x3|12"
+|  Id  Size
+|  --  ----
+|  1   4 MB
+|  20  -
+|  x3  12
+
+[plain] table: signs, separators, percent and empty cells
+$ table "A|B|C|D" "-3|1,000.50|50%|" "+12|7|5%|9" "4||100%|10"
+|    A         B     C   D
+|  ---  --------  ----  --
+|   -3  1,000.50   50%
+|  +12         7    5%   9
+|    4            100%  10
+
+[plain] table: explicit alignment
+$ table -a rcl "left|mid|right" "a|b|c" "xxxxxxx|yyyyyyyy|zzzzzzzz" "1|2|3"
+|     left    mid     right
+|  -------  --------  --------
+|        a     b      c
+|  xxxxxxx  yyyyyyyy  zzzzzzzz
+|        1     2      3
+
+[agent] table: explicit alignment
+$ table -a rcl "left|mid|right" "a|b|c" "xxxxxxx|yyyyyyyy|zzzzzzzz" "1|2|3"
+|left\tmid\tright
+|a\tb\tc
+|xxxxxxx\tyyyyyyyy\tzzzzzzzz
+|1\t2\t3
+
+[plain] table: alignment for some columns only
+$ table -a c "Name|Count" "a|1" "bbbbbbb|200"
+|   Name    Count
+|  -------  -----
+|     a         1
+|  bbbbbbb    200
+
+[plain] table: borders
+$ table -b "Name | Role | Since" "Ana | dev | 2019" "Björn | ops | 2021"
+|+-------+------+-------+
+|| Name  | Role | Since |
+|+-------+------+-------+
+|| Ana   | dev  |  2019 |
+|| Björn | ops  |  2021 |
+|+-------+------+-------+
+
+[agent] table: borders
+$ table -b "Name | Role | Since" "Ana | dev | 2019" "Björn | ops | 2021"
+|Name\tRole\tSince
+|Ana\tdev\t2019
+|Björn\tops\t2021
+
+[rich] table: borders
+$ table -b "Name | Role | Since" "Ana | dev | 2019" "Björn | ops | 2021"
+|\e[90m╭───────┬──────┬───────╮\e[0m
+|\e[90m│\e[0m \e[1mName \e[0m \e[90m│\e[0m \e[1mRole\e[0m \e[90m│\e[0m \e[1mSince\e[0m \e[90m│\e[0m
+|\e[90m├───────┼──────┼───────┤\e[0m
+|\e[90m│\e[0m Ana   \e[90m│\e[0m dev  \e[90m│\e[0m  2019 \e[90m│\e[0m
+|\e[90m│\e[0m Björn \e[90m│\e[0m ops  \e[90m│\e[0m  2021 \e[90m│\e[0m
+|\e[90m╰───────┴──────┴───────╯\e[0m
+
+[plain] table: borders, ragged rows
+$ table -b "a|b|c" "d" "e|f"
+|+---+---+---+
+|| a | b | c |
+|+---+---+---+
+|| d |   |   |
+|| e | f |   |
+|+---+---+---+
+
+[plain] table: borders, header only
+$ table -b "a|b"
+|+---+---+
+|| a | b |
+|+---+---+
+
+[plain] table: no header
+$ table -H "apple|1" "banana|22" "kiwi|333"
+|  apple     1
+|  banana   22
+|  kiwi    333
+
+[rich] table: no header
+$ table -H "apple|1" "banana|22" "kiwi|333"
+|  apple     1
+|  banana   22
+|  kiwi    333
+
+[agent] table: no header
+$ table -H "apple|1" "banana|22" "kiwi|333"
+|apple\t1
+|banana\t22
+|kiwi\t333
+
+[plain] table: borders, no header
+$ table -b -H "apple|1" "banana|22"
+|+--------+----+
+|| apple  |  1 |
+|| banana | 22 |
+|+--------+----+
+
+[rich] table: borders, no header
+$ table -b -H "apple|1" "banana|22"
+|\e[90m╭────────┬────╮\e[0m
+|\e[90m│\e[0m apple  \e[90m│\e[0m  1 \e[90m│\e[0m
+|\e[90m│\e[0m banana \e[90m│\e[0m 22 \e[90m│\e[0m
+|\e[90m╰────────┴────╯\e[0m
+
+[plain] table: header only
+$ table "a|bb"
+|  a  bb
+|  -  --
+
+[rich] table: header only
+$ table "a|bb"
+|  \e[1ma  bb\e[0m
+|  \e[2m─  ──\e[0m
+
+[plain] table: centred
+$ table -a ccc -b "x|yy|zzz" "aaaaa|b|cc"
+|+-------+----+-----+
+||   x   | yy | zzz |
+|+-------+----+-----+
+|| aaaaa | b  | cc  |
+|+-------+----+-----+
+
+[rich] table: too wide is cut for a terminal only
+% COLUMNS=30
+$ table "File|Description" "a.rs|A long description that does not fit in thirty columns" "b.rs|Short"
+|  \e[1mFile  Description\e[0m
+|  \e[2m────  ──────────────────────\e[0m
+|  a.rs  A long description th…
+|  b.rs  Short
+
+[plain] table: too wide is cut for a terminal only
+% COLUMNS=30
+$ table "File|Description" "a.rs|A long description that does not fit in thirty columns" "b.rs|Short"
+|  File  Description
+|  ----  ------------------------------------------------------
+|  a.rs  A long description that does not fit in thirty columns
+|  b.rs  Short
+
+[rich] table: too wide, with borders
+% COLUMNS=34
+$ table -b "File|Description|N" "a.rs|A long description that does not fit|1" "another-long-name.rs|Short|22"
+|\e[90m╭─────────────┬─────────────┬────╮\e[0m
+|\e[90m│\e[0m \e[1mFile       \e[0m \e[90m│\e[0m \e[1mDescription\e[0m \e[90m│\e[0m \e[1m N\e[0m \e[90m│\e[0m
+|\e[90m├─────────────┼─────────────┼────┤\e[0m
+|\e[90m│\e[0m a.rs        \e[90m│\e[0m A long des… \e[90m│\e[0m  1 \e[90m│\e[0m
+|\e[90m│\e[0m another-lo… \e[90m│\e[0m Short       \e[90m│\e[0m 22 \e[90m│\e[0m
+|\e[90m╰─────────────┴─────────────┴────╯\e[0m
+
+[rich] table: columns are never cut below four
+% COLUMNS=10
+$ table "aaaaaaaaaa|bbbbbbbbbb|cccccccccc" "1234567890|1234567890|1234567890"
+|  \e[1maaa…  bbb…  ccc…\e[0m
+|  \e[2m────  ────  ────\e[0m
+|  123…  123…  123…
+
+[rich] keys: tab and shift-tab move in a menu
+% CLI_INTERACTIVE=1
+$ select Fruit apple banana cherry
+< \t\t
+|cherry
+!\e[36m?\e[0m \e[1mFruit\e[0m  \e[2m↑/↓ move, enter select\e[0m
+!\e[36m❯\e[0m \e[1mapple\e[0m\e[K
+!  banana\e[K
+!  cherry\e[K
+!\e[3A  apple\e[K
+!\e[36m❯\e[0m \e[1mbanana\e[0m\e[K
+!  cherry\e[K
+!\e[3A  apple\e[K
+!  banana\e[K
+!\e[36m❯\e[0m \e[1mcherry\e[0m\e[K
+!\e[4A\e[J\e[32m✓\e[0m Fruit \e[2m›\e[0m cherry
+
+[rich] keys: shift-tab from the top wraps around
+% CLI_INTERACTIVE=1
+$ select Fruit apple banana cherry
+< \e[Z
+|cherry
+!\e[36m?\e[0m \e[1mFruit\e[0m  \e[2m↑/↓ move, enter select\e[0m
+!\e[36m❯\e[0m \e[1mapple\e[0m\e[K
+!  banana\e[K
+!  cherry\e[K
+!\e[3A  apple\e[K
+!  banana\e[K
+!\e[36m❯\e[0m \e[1mcherry\e[0m\e[K
+!\e[4A\e[J\e[32m✓\e[0m Fruit \e[2m›\e[0m cherry
+
+[rich] keys: an unknown key is ignored
+% CLI_INTERACTIVE=1
+$ select Fruit apple banana cherry
+< \e[5~\e[2~x\e[B
+|banana
+!\e[36m?\e[0m \e[1mFruit\e[0m  \e[2m↑/↓ move, enter select\e[0m
+!\e[36m❯\e[0m \e[1mapple\e[0m\e[K
+!  banana\e[K
+!  cherry\e[K
+!\e[3A\e[36m❯\e[0m \e[1mapple\e[0m\e[K
+!  banana\e[K
+!  cherry\e[K
+!\e[3A\e[36m❯\e[0m \e[1mapple\e[0m\e[K
+!  banana\e[K
+!  cherry\e[K
+!\e[3A\e[36m❯\e[0m \e[1mapple\e[0m\e[K
+!  banana\e[K
+!  cherry\e[K
+!\e[3A  apple\e[K
+!\e[36m❯\e[0m \e[1mbanana\e[0m\e[K
+!  cherry\e[K
+!\e[4A\e[J\e[32m✓\e[0m Fruit \e[2m›\e[0m banana
+
+[rich] keys: confirm, esc
+% CLI_INTERACTIVE=1
+$ confirm Go y
+< \e
+!\e[36m?\e[0m Go \e[2m[Y/n]\e[0m no
+= 3
+
+[plain] confirm -p prints the answer
+$ confirm -p Go
+< y
+|yes
+!Go [y/n] y
+
+[agent] confirm -p prints the answer
+$ confirm -p Go
+< y
+|yes
+!Go y
+
+[plain] confirm -p: no
+$ confirm -p Go y
+< n
+|no
+!Go [Y/n] n
+
+[plain] confirm -p: default
+$ confirm -p Go n
+|no
+!Go [y/N] n
+
+[plain] confirm -p: nobody answered
+$ confirm -p Go
+!Go [y/n]\s
+![ERROR] input required: Go [y/n]. Pipe y or n on stdin, or set CLI_YES=1.
+= 2
+
+[rich] keys: confirm -p
+% CLI_INTERACTIVE=1
+$ confirm -p Go
+< y
+|yes
+!\e[36m?\e[0m Go \e[2m[y/n]\e[0m yes
+
+[rich] keys: confirm -p, esc
+% CLI_INTERACTIVE=1
+$ confirm -p Go
+< \e
+!\e[36m?\e[0m Go \e[2m[y/n]\e[0m no
+= 3
+
+[rich] edit: backspace
+% CLI_INTERACTIVE=1
+$ input Name
+< anb\ba
+|ana
+!\r\e[J\e[36m?\e[0m Name \r\e[J\e[36m?\e[0m Name a\r\e[J\e[36m?\e[0m Name an\r\e[J\e[36m?\e[0m Name anb\r\e[J\e[36m?\e[0m Name an\r\e[J\e[36m?\e[0m Name ana\r\e[J\e[36m?\e[0m Name ana
+
+[rich] edit: left, right, home, end, delete
+% CLI_INTERACTIVE=1
+$ input Text
+< abc\e[D\e[DX\e[3~\e[FZ\e[H>\e[C-
+|>a-XcZ
+!\r\e[J\e[36m?\e[0m Text \r\e[J\e[36m?\e[0m Text a\r\e[J\e[36m?\e[0m Text ab\r\e[J\e[36m?\e[0m Text abc\r\e[J\e[36m?\e[0m Text abc\e[1D\r\e[J\e[36m?\e[0m Text abc\e[2D\r\e[J\e[36m?\e[0m Text aXbc\e[2D\r\e[J\e[36m?\e[0m Text aXc\e[1D\r\e[J\e[36m?\e[0m Text aXc\r\e[J\e[36m?\e[0m Text aXcZ\r\e[J\e[36m?\e[0m Text aXcZ\e[4D\r\e[J\e[36m?\e[0m Text >aXcZ\e[4D\r\e[J\e[36m?\e[0m Text >aXcZ\e[3D\r\e[J\e[36m?\e[0m Text >a-XcZ\e[3D\r\e[J\e[36m?\e[0m Text >a-XcZ
+
+[rich] edit: left at the start and right at the end do nothing
+% CLI_INTERACTIVE=1
+$ input Text
+< \e[D\e[Ca\e[C\e[3~\b\b
+|
+!\r\e[J\e[36m?\e[0m Text \r\e[J\e[36m?\e[0m Text \r\e[J\e[36m?\e[0m Text \r\e[J\e[36m?\e[0m Text a\r\e[J\e[36m?\e[0m Text a\r\e[J\e[36m?\e[0m Text a\r\e[J\e[36m?\e[0m Text \r\e[J\e[36m?\e[0m Text \r\e[J\e[36m?\e[0m Text\s
+
+[rich] edit: esc cancels
+% CLI_INTERACTIVE=1
+$ input Name
+< ab\e
+!\r\e[J\e[36m?\e[0m Name \r\e[J\e[36m?\e[0m Name a\r\e[J\e[36m?\e[0m Name ab\r\e[J\e[36m?\e[0m Name ab
+= 3
+
+[rich] edit: no input at all
+% CLI_INTERACTIVE=1
+$ input Name
+!\r\e[J\e[36m?\e[0m Name\s
+!\e[31m✗\e[0m input required: Name. Pipe the answer on stdin.
+= 1
+
+[rich] edit: enter takes the default
+% CLI_INTERACTIVE=1
+$ input Name bo
+<
+|bo
+!\r\e[J\e[36m?\e[0m Name \e[2m(bo)\e[0m \r\e[J\e[36m?\e[0m Name \e[2m(bo)\e[0m\s
+
+[rich] edit: unicode
+% CLI_INTERACTIVE=1
+$ input Name
+< Bjö\bo\e[Drn\e[3~
+|Bjrn
+!\r\e[J\e[36m?\e[0m Name \r\e[J\e[36m?\e[0m Name B\r\e[J\e[36m?\e[0m Name Bj\r\e[J\e[36m?\e[0m Name Bjö\r\e[J\e[36m?\e[0m Name Bj\r\e[J\e[36m?\e[0m Name Bjo\r\e[J\e[36m?\e[0m Name Bjo\e[1D\r\e[J\e[36m?\e[0m Name Bjro\e[1D\r\e[J\e[36m?\e[0m Name Bjrno\e[1D\r\e[J\e[36m?\e[0m Name Bjrn\r\e[J\e[36m?\e[0m Name Bjrn
+
+[rich] complete: tab takes the first
+% CLI_INTERACTIVE=1
+$ input -c main -c dev -c feature -c fix Branch
+< \t
+|main
+!\r\e[J\e[36m?\e[0m Branch \r\e[J
+!\e[1m\e[36mmain\e[0m  \e[2mdev\e[0m  \e[2mfeature\e[0m  \e[2mfix\e[0m  \e[1A\r\e[36m?\e[0m Branch main\r\e[J\e[36m?\e[0m Branch main
+
+[rich] complete: tab tab
+% CLI_INTERACTIVE=1
+$ input -c main -c dev -c feature -c fix Branch
+< \t\t
+|dev
+!\r\e[J\e[36m?\e[0m Branch \r\e[J
+!\e[1m\e[36mmain\e[0m  \e[2mdev\e[0m  \e[2mfeature\e[0m  \e[2mfix\e[0m  \e[1A\r\e[36m?\e[0m Branch main\r\e[J
+!\e[2mmain\e[0m  \e[1m\e[36mdev\e[0m  \e[2mfeature\e[0m  \e[2mfix\e[0m  \e[1A\r\e[36m?\e[0m Branch dev\r\e[J\e[36m?\e[0m Branch dev
+
+[rich] complete: shift-tab takes the last
+% CLI_INTERACTIVE=1
+$ input -c main -c dev -c feature -c fix Branch
+< \e[Z
+|fix
+!\r\e[J\e[36m?\e[0m Branch \r\e[J
+!\e[2mmain\e[0m  \e[2mdev\e[0m  \e[2mfeature\e[0m  \e[1m\e[36mfix\e[0m  \e[1A\r\e[36m?\e[0m Branch fix\r\e[J\e[36m?\e[0m Branch fix
+
+[rich] complete: tab wraps around
+% CLI_INTERACTIVE=1
+$ input -c main -c dev -c feature -c fix Branch
+< \t\t\t\t\t
+|main
+!\r\e[J\e[36m?\e[0m Branch \r\e[J
+!\e[1m\e[36mmain\e[0m  \e[2mdev\e[0m  \e[2mfeature\e[0m  \e[2mfix\e[0m  \e[1A\r\e[36m?\e[0m Branch main\r\e[J
+!\e[2mmain\e[0m  \e[1m\e[36mdev\e[0m  \e[2mfeature\e[0m  \e[2mfix\e[0m  \e[1A\r\e[36m?\e[0m Branch dev\r\e[J
+!\e[2mmain\e[0m  \e[2mdev\e[0m  \e[1m\e[36mfeature\e[0m  \e[2mfix\e[0m  \e[1A\r\e[36m?\e[0m Branch feature\r\e[J
+!\e[2mmain\e[0m  \e[2mdev\e[0m  \e[2mfeature\e[0m  \e[1m\e[36mfix\e[0m  \e[1A\r\e[36m?\e[0m Branch fix\r\e[J
+!\e[1m\e[36mmain\e[0m  \e[2mdev\e[0m  \e[2mfeature\e[0m  \e[2mfix\e[0m  \e[1A\r\e[36m?\e[0m Branch main\r\e[J\e[36m?\e[0m Branch main
+
+[rich] complete: tab then shift-tab
+% CLI_INTERACTIVE=1
+$ input -c main -c dev -c feature -c fix Branch
+< \t\t\e[Z\e[Z
+|fix
+!\r\e[J\e[36m?\e[0m Branch \r\e[J
+!\e[1m\e[36mmain\e[0m  \e[2mdev\e[0m  \e[2mfeature\e[0m  \e[2mfix\e[0m  \e[1A\r\e[36m?\e[0m Branch main\r\e[J
+!\e[2mmain\e[0m  \e[1m\e[36mdev\e[0m  \e[2mfeature\e[0m  \e[2mfix\e[0m  \e[1A\r\e[36m?\e[0m Branch dev\r\e[J
+!\e[1m\e[36mmain\e[0m  \e[2mdev\e[0m  \e[2mfeature\e[0m  \e[2mfix\e[0m  \e[1A\r\e[36m?\e[0m Branch main\r\e[J
+!\e[2mmain\e[0m  \e[2mdev\e[0m  \e[2mfeature\e[0m  \e[1m\e[36mfix\e[0m  \e[1A\r\e[36m?\e[0m Branch fix\r\e[J\e[36m?\e[0m Branch fix
+
+[rich] complete: only what matches the typed text
+% CLI_INTERACTIVE=1
+$ input -c main -c dev -c feature -c fix Branch
+< f\t\t
+|fix
+!\r\e[J\e[36m?\e[0m Branch \r\e[J\e[36m?\e[0m Branch f\r\e[J
+!\e[1m\e[36mfeature\e[0m  \e[2mfix\e[0m  \e[1A\r\e[36m?\e[0m Branch feature\r\e[J
+!\e[2mfeature\e[0m  \e[1m\e[36mfix\e[0m  \e[1A\r\e[36m?\e[0m Branch fix\r\e[J\e[36m?\e[0m Branch fix
+
+[rich] complete: a single match is taken at once
+% CLI_INTERACTIVE=1
+$ input -c main -c dev -c feature -c fix Branch
+< d\t
+|dev
+!\r\e[J\e[36m?\e[0m Branch \r\e[J\e[36m?\e[0m Branch d\r\e[J\e[36m?\e[0m Branch dev\r\e[J\e[36m?\e[0m Branch dev
+
+[rich] complete: no match changes nothing
+% CLI_INTERACTIVE=1
+$ input -c main -c dev -c feature -c fix Branch
+< x\t\e[Z
+|x
+!\r\e[J\e[36m?\e[0m Branch \r\e[J\e[36m?\e[0m Branch x\r\e[J\e[36m?\e[0m Branch x\r\e[J\e[36m?\e[0m Branch x\r\e[J\e[36m?\e[0m Branch x
+
+[rich] complete: esc puts back what was typed
+% CLI_INTERACTIVE=1
+$ input -c main -c dev -c feature -c fix Branch
+< f\t\eoo
+|foo
+!\r\e[J\e[36m?\e[0m Branch \r\e[J\e[36m?\e[0m Branch f\r\e[J
+!\e[1m\e[36mfeature\e[0m  \e[2mfix\e[0m  \e[1A\r\e[36m?\e[0m Branch feature\r\e[J\e[36m?\e[0m Branch f\r\e[J\e[36m?\e[0m Branch fo\r\e[J\e[36m?\e[0m Branch foo\r\e[J\e[36m?\e[0m Branch foo
+
+[rich] complete: typing after a candidate keeps it
+% CLI_INTERACTIVE=1
+$ input -c main -c dev -c feature -c fix Branch
+< \t-2
+|main-2
+!\r\e[J\e[36m?\e[0m Branch \r\e[J
+!\e[1m\e[36mmain\e[0m  \e[2mdev\e[0m  \e[2mfeature\e[0m  \e[2mfix\e[0m  \e[1A\r\e[36m?\e[0m Branch main\r\e[J\e[36m?\e[0m Branch main-\r\e[J\e[36m?\e[0m Branch main-2\r\e[J\e[36m?\e[0m Branch main-2
+
+[rich] complete: backspace after a candidate
+% CLI_INTERACTIVE=1
+$ input -c main -c dev -c feature -c fix Branch
+< f\t\b\t
+|feature
+!\r\e[J\e[36m?\e[0m Branch \r\e[J\e[36m?\e[0m Branch f\r\e[J
+!\e[1m\e[36mfeature\e[0m  \e[2mfix\e[0m  \e[1A\r\e[36m?\e[0m Branch feature\r\e[J\e[36m?\e[0m Branch featur\r\e[J\e[36m?\e[0m Branch feature\r\e[J\e[36m?\e[0m Branch feature
+
+[rich] complete: candidates with spaces
+% CLI_INTERACTIVE=1
+$ input -c "New York" -c "New Delhi" -c Oslo City
+< New\t\t
+|New Delhi
+!\r\e[J\e[36m?\e[0m City \r\e[J\e[36m?\e[0m City N\r\e[J\e[36m?\e[0m City Ne\r\e[J\e[36m?\e[0m City New\r\e[J
+!\e[1m\e[36mNew York\e[0m  \e[2mNew Delhi\e[0m  \e[1A\r\e[36m?\e[0m City New York\r\e[J
+!\e[2mNew York\e[0m  \e[1m\e[36mNew Delhi\e[0m  \e[1A\r\e[36m?\e[0m City New Delhi\r\e[J\e[36m?\e[0m City New Delhi
+
+[rich] complete: the row of candidates is cut to the width
+% CLI_INTERACTIVE=1
+% COLUMNS=24
+$ input -c alpha -c bravo -c charlie -c delta -c echo -c foxtrot Word
+< \t\t\t\t\t\t
+|foxtrot
+!\r\e[J\e[36m?\e[0m Word \r\e[J
+!\e[1m\e[36malpha\e[0m  \e[2mbravo\e[0m  \e[2m…\e[0m\e[1A\r\e[36m?\e[0m Word alpha\r\e[J
+!\e[2malpha\e[0m  \e[1m\e[36mbravo\e[0m  \e[2m…\e[0m\e[1A\r\e[36m?\e[0m Word bravo\r\e[J
+!\e[2m…\e[0m  \e[1m\e[36mcharlie\e[0m  \e[2mdelta\e[0m  \e[2m…\e[0m\e[1A\r\e[36m?\e[0m Word charlie\r\e[J
+!\e[2m…\e[0m  \e[2mcharlie\e[0m  \e[1m\e[36mdelta\e[0m  \e[2m…\e[0m\e[1A\r\e[36m?\e[0m Word delta\r\e[J
+!\e[2m…\e[0m  \e[1m\e[36mecho\e[0m  \e[2mfoxtrot\e[0m  \e[1A\r\e[36m?\e[0m Word echo\r\e[J
+!\e[2m…\e[0m  \e[2mecho\e[0m  \e[1m\e[36mfoxtrot\e[0m  \e[1A\r\e[36m?\e[0m Word foxtrot\r\e[J\e[36m?\e[0m Word foxtrot
+
+[rich] complete: without candidates tab does nothing
+% CLI_INTERACTIVE=1
+$ input Name
+< a\tb
+|ab
+!\r\e[J\e[36m?\e[0m Name \r\e[J\e[36m?\e[0m Name a\r\e[J\e[36m?\e[0m Name a\r\e[J\e[36m?\e[0m Name ab\r\e[J\e[36m?\e[0m Name ab
+
+[rich] complete: with a default
+% CLI_INTERACTIVE=1
+$ input -c main -c dev Branch main
+<
+|main
+!\r\e[J\e[36m?\e[0m Branch \e[2m(main)\e[0m \r\e[J\e[36m?\e[0m Branch \e[2m(main)\e[0m\s
+
+[plain] input -c: suggestions are named when nobody answers
+$ input -c main -c dev Branch
+!Branch:\s
+![ERROR] input required: Branch (suggestions: main | dev). Pipe the answer on stdin.
+= 1
+
+[agent] input -c: suggestions are named when nobody answers
+$ input -c main -c dev Branch
+!error: input required: Branch (suggestions: main | dev). Pipe the answer on stdin.
+= 1
+
+[plain] input -c: without keys it is an ordinary question
+$ input -c main -c dev Branch
+< dev
+|dev
+!Branch: dev
+
+[agent] input -c: without keys it is an ordinary question
+$ input -c main -c dev Branch
+< dev
+|dev
+!Branch: dev
+
+[rich] progress: the count is padded so the line does not shift
+$ progress 5 100 Downloading
+$ progress 50 100 Downloading
+$ progress 100 100 Downloading
+!\r\e[36m⠋\e[0m Downloading \e[32m█\e[0m\e[2m░░░░░░░░░░░░░░░░░░░░░░░\e[0m   5% \e[2m  5/100 <T>\e[0m\e[K\r\e[36m⠙\e[0m Downloading \e[32m████████████\e[0m\e[2m░░░░░░░░░░░░\e[0m  50% \e[2m 50/100 <T>\e[0m\e[K\r\e[36m⠹\e[0m Downloading \e[32m████████████████████████\e[0m\e[2m\e[0m 100% \e[2m100/100 <T>\e[0m\e[K\r\e[K\e[32m✓\e[0m Downloading (100/100, <T>)
+
+[rich] progress: two bars in a row end as two aligned lines
+$ progress 3 3 Copying
+$ progress 1 2 "Uploading to staging"
+$ progress 2 2 "Uploading to staging"
+$ ok Done
+!\r\e[36m⠋\e[0m Copying \e[32m████████████████████████\e[0m\e[2m\e[0m 100% \e[2m3/3 <T>\e[0m\e[K\r\e[K\e[32m✓\e[0m Copying (3/3, <T>)
+!\r\e[36m⠋\e[0m Uploading to staging \e[32m████████████\e[0m\e[2m░░░░░░░░░░░░\e[0m  50% \e[2m1/2 <T>\e[0m\e[K\r\e[36m⠙\e[0m Uploading to staging \e[32m████████████████████████\e[0m\e[2m\e[0m 100% \e[2m2/2 <T>\e[0m\e[K\r\e[K\e[32m✓\e[0m Uploading to staging (2/2, <T>)
+!\e[32m✓\e[0m Done
+
+[plain] timeline: tracks along an axis, with links
+% COLUMNS=70
+$ timeline "2024-02-01|iPhone 12|38.7 GB" "2024-07-11|iPad|11.9 GB" "2025-01-15|iPhone 12|40.2 GB" "2025-06-01|iPhone 15|continues iPhone 12|iPhone 12" "2025-11-20|iPad|12.8 GB" "2026-04-02|iPhone 15|44.1 GB" "2026-09-14|iPhone 15|combined with iPad|iPad" "2026-11-20|iPhone 15|44.9 GB"
+|             2024              2025                2026
+|  iPhone 12  *------------------*-------+
+|  iPad                *-----------------+--------*---------------+
+|  iPhone 15                             *---------------*--------*---*
+
+[rich] timeline: tracks along an axis, with links
+% COLUMNS=70
+$ timeline "2024-02-01|iPhone 12|38.7 GB" "2024-07-11|iPad|11.9 GB" "2025-01-15|iPhone 12|40.2 GB" "2025-06-01|iPhone 15|continues iPhone 12|iPhone 12" "2025-11-20|iPad|12.8 GB" "2026-04-02|iPhone 15|44.1 GB" "2026-09-14|iPhone 15|combined with iPad|iPad" "2026-11-20|iPhone 15|44.9 GB"
+|             \e[2m2024              2025                2026\e[0m
+|  \e[36miPhone 12  ●──────────────────●───────╮\e[0m
+|  \e[35miPad                ●─────────────────┼────────●───────────────╮\e[0m
+|  \e[33miPhone 15                             ●───────────────●────────●───●\e[0m
+
+[agent] timeline: tracks along an axis, with links
+$ timeline "2024-02-01|iPhone 12|38.7 GB" "2024-07-11|iPad|11.9 GB" "2025-01-15|iPhone 12|40.2 GB" "2025-06-01|iPhone 15|continues iPhone 12|iPhone 12" "2025-11-20|iPad|12.8 GB" "2026-04-02|iPhone 15|44.1 GB" "2026-09-14|iPhone 15|combined with iPad|iPad" "2026-11-20|iPhone 15|44.9 GB"
+|2024-02-01\tiPhone 12\t38.7 GB
+|2024-07-11\tiPad\t11.9 GB
+|2025-01-15\tiPhone 12\t40.2 GB
+|2025-06-01\tiPhone 15\tcontinues iPhone 12\tfrom: iPhone 12
+|2025-11-20\tiPad\t12.8 GB
+|2026-04-02\tiPhone 15\t44.1 GB
+|2026-09-14\tiPhone 15\tcombined with iPad\tfrom: iPad
+|2026-11-20\tiPhone 15\t44.9 GB
+
+[plain] timeline: one row per event
+$ timeline -v "2024-02-01|iPhone 12|38.7 GB" "2024-07-11|iPad|11.9 GB" "2025-01-15|iPhone 12|40.2 GB" "2025-06-01|iPhone 15|continues iPhone 12|iPhone 12" "2025-11-20|iPad|12.8 GB" "2026-04-02|iPhone 15|44.1 GB" "2026-09-14|iPhone 15|combined with iPad|iPad" "2026-11-20|iPhone 15|44.9 GB"
+|  *      2024-02-01  iPhone 12  38.7 GB
+|  | *    2024-07-11  iPad       11.9 GB
+|  * |    2025-01-15  iPhone 12  40.2 GB
+|  +-+-*  2025-06-01  iPhone 15  continues iPhone 12
+|    * |  2025-11-20  iPad       12.8 GB
+|    | *  2026-04-02  iPhone 15  44.1 GB
+|    +-*  2026-09-14  iPhone 15  combined with iPad
+|      *  2026-11-20  iPhone 15  44.9 GB
+
+[rich] timeline: one row per event
+$ timeline -v "2024-02-01|iPhone 12|38.7 GB" "2024-07-11|iPad|11.9 GB" "2025-01-15|iPhone 12|40.2 GB" "2025-06-01|iPhone 15|continues iPhone 12|iPhone 12" "2025-11-20|iPad|12.8 GB" "2026-04-02|iPhone 15|44.1 GB" "2026-09-14|iPhone 15|combined with iPad|iPad" "2026-11-20|iPhone 15|44.9 GB"
+|  \e[36m●\e[0m      \e[2m2024-02-01\e[0m  \e[36miPhone 12\e[0m  38.7 GB
+|  \e[36m│\e[0m \e[35m●\e[0m    \e[2m2024-07-11\e[0m  \e[35miPad     \e[0m  11.9 GB
+|  \e[36m●\e[0m \e[35m│\e[0m    \e[2m2025-01-15\e[0m  \e[36miPhone 12\e[0m  40.2 GB
+|  \e[36m╰\e[0m\e[36m─\e[0m\e[35m┼\e[0m\e[36m─\e[0m\e[33m●\e[0m  \e[2m2025-06-01\e[0m  \e[33miPhone 15\e[0m  continues iPhone 12
+|    \e[35m●\e[0m \e[33m│\e[0m  \e[2m2025-11-20\e[0m  \e[35miPad     \e[0m  12.8 GB
+|    \e[35m│\e[0m \e[33m●\e[0m  \e[2m2026-04-02\e[0m  \e[33miPhone 15\e[0m  44.1 GB
+|    \e[35m╰\e[0m\e[35m─\e[0m\e[33m●\e[0m  \e[2m2026-09-14\e[0m  \e[33miPhone 15\e[0m  combined with iPad
+|      \e[33m●\e[0m  \e[2m2026-11-20\e[0m  \e[33miPhone 15\e[0m  44.9 GB
+
+[agent] timeline: one row per event
+$ timeline -v -r "2024-02-01|iPhone 12|38.7 GB" "2024-07-11|iPad|11.9 GB" "2025-01-15|iPhone 12|40.2 GB" "2025-06-01|iPhone 15|continues iPhone 12|iPhone 12" "2025-11-20|iPad|12.8 GB" "2026-04-02|iPhone 15|44.1 GB" "2026-09-14|iPhone 15|combined with iPad|iPad" "2026-11-20|iPhone 15|44.9 GB"
+|2024-02-01\tiPhone 12\t38.7 GB
+|2024-07-11\tiPad\t11.9 GB
+|2025-01-15\tiPhone 12\t40.2 GB
+|2025-06-01\tiPhone 15\tcontinues iPhone 12\tfrom: iPhone 12
+|2025-11-20\tiPad\t12.8 GB
+|2026-04-02\tiPhone 15\t44.1 GB
+|2026-09-14\tiPhone 15\tcombined with iPad\tfrom: iPad
+|2026-11-20\tiPhone 15\t44.9 GB
+
+[plain] timeline: one row per event, newest first
+$ timeline -v -r "2024-02-01|iPhone 12|38.7 GB" "2024-07-11|iPad|11.9 GB" "2025-01-15|iPhone 12|40.2 GB" "2025-06-01|iPhone 15|continues iPhone 12|iPhone 12" "2025-11-20|iPad|12.8 GB" "2026-04-02|iPhone 15|44.1 GB" "2026-09-14|iPhone 15|combined with iPad|iPad" "2026-11-20|iPhone 15|44.9 GB"
+|      *  2026-11-20  iPhone 15  44.9 GB
+|    +-*  2026-09-14  iPhone 15  combined with iPad
+|    | *  2026-04-02  iPhone 15  44.1 GB
+|    * |  2025-11-20  iPad       12.8 GB
+|  +-+-*  2025-06-01  iPhone 15  continues iPhone 12
+|  * |    2025-01-15  iPhone 12  40.2 GB
+|  | *    2024-07-11  iPad       11.9 GB
+|  *      2024-02-01  iPhone 12  38.7 GB
+
+[rich] timeline: one row per event, newest first
+% NO_COLOR=1
+$ timeline -v -r "2024-02-01|iPhone 12|38.7 GB" "2024-07-11|iPad|11.9 GB" "2025-01-15|iPhone 12|40.2 GB" "2025-06-01|iPhone 15|continues iPhone 12|iPhone 12" "2025-11-20|iPad|12.8 GB" "2026-04-02|iPhone 15|44.1 GB" "2026-09-14|iPhone 15|combined with iPad|iPad" "2026-11-20|iPhone 15|44.9 GB"
+|      ●  2026-11-20  iPhone 15  44.9 GB
+|    ╭─●  2026-09-14  iPhone 15  combined with iPad
+|    │ ●  2026-04-02  iPhone 15  44.1 GB
+|    ● │  2025-11-20  iPad       12.8 GB
+|  ╭─┼─●  2025-06-01  iPhone 15  continues iPhone 12
+|  ● │    2025-01-15  iPhone 12  40.2 GB
+|  │ ●    2024-07-11  iPad       11.9 GB
+|  ●      2024-02-01  iPhone 12  38.7 GB
+
+[plain] timeline: text instead of dates keeps the order given
+% COLUMNS=60
+$ timeline "v1.0|main|first" "v1.1|main|fix" "v2.0-rc|next|rewrite|main" "v1.2|main|" "v2.0|main|merge next|next"
+|        v1.0                                            v2.0
+|  main  *------------*------------+-----------*------------*
+|  next                            *------------------------+
+
+[rich] timeline: text instead of dates keeps the order given
+% COLUMNS=60
+% NO_COLOR=1
+$ timeline "v1.0|main|first" "v1.1|main|fix" "v2.0-rc|next|rewrite|main" "v1.2|main|" "v2.0|main|merge next|next"
+|        v1.0                                            v2.0
+|  main  ●────────────●────────────┬───────────●────────────●
+|  next                            ●────────────────────────╯
+
+[plain] timeline: text instead of dates, one row per event
+$ timeline -v "v1.0|main|first" "v1.1|main|fix" "v2.0-rc|next|rewrite|main" "v1.2|main|" "v2.0|main|merge next|next"
+|  *    v1.0     main  first
+|  *    v1.1     main  fix
+|  +-*  v2.0-rc  next  rewrite
+|  * |  v1.2     main
+|  *-+  v2.0     main  merge next
+
+[agent] timeline: text instead of dates, one row per event
+$ timeline -v "v1.0|main|first" "v1.1|main|fix" "v2.0-rc|next|rewrite|main" "v1.2|main|" "v2.0|main|merge next|next"
+|v1.0\tmain\tfirst
+|v1.1\tmain\tfix
+|v2.0-rc\tnext\trewrite\tfrom: main
+|v1.2\tmain
+|v2.0\tmain\tmerge next\tfrom: next
+
+[plain] timeline: numbers are sorted and spaced
+% COLUMNS=60
+$ timeline "10|a|x" "250|b|y" "-40|a|z" "0007|c|w"
+|     -40                                                 250
+|  a  *--------*
+|  c           *
+|  b                                                        *
+
+[plain] timeline: numbers, one row per event
+$ timeline -v "10|a|x" "250|b|y" "-40|a|z" "0007|c|w"
+|  *      -40   a  z
+|  | *    0007  c  w
+|  *      10    a  x
+|      *  250   b  y
+
+[agent] timeline: numbers are sorted and spaced
+$ timeline "10|a|x" "250|b|y" "-40|a|z" "0007|c|w"
+|-40\ta\tz
+|0007\tc\tw
+|10\ta\tx
+|250\tb\ty
+
+[plain] timeline: a date and a number together are text
+% COLUMNS=40
+$ timeline "2026-01-01|a|" "5|a|" "2025-01-01|a|"
+|     2026-01-01               2025-01-01
+|  a  *----------------*----------------*
+
+[plain] timeline: one track without a name, hours on the axis
+% COLUMNS=60
+$ timeline "2026-11-26 09:15||breakfast" "2026-11-26 12:40||lunch" "2026-11-26T19:05:30+01:00||dinner"
+|  2026-11-26 09:15            14:00      16:00       18:00
+|  *-------------------*------------------------------------*
+
+[plain] timeline: one track without a name, one row per event
+$ timeline -v "2026-11-26 09:15||breakfast" "2026-11-26 12:40||lunch" "2026-11-26T19:05:30+01:00||dinner"
+|  *  2026-11-26 09:15           breakfast
+|  *  2026-11-26 12:40           lunch
+|  *  2026-11-26T19:05:30+01:00  dinner
+
+[agent] timeline: one track without a name, one row per event
+$ timeline -v "2026-11-26 09:15||breakfast" "2026-11-26 12:40||lunch" "2026-11-26T19:05:30+01:00||dinner"
+|2026-11-26 09:15\tbreakfast
+|2026-11-26 12:40\tlunch
+|2026-11-26T19:05:30+01:00\tdinner
+
+[plain] timeline: hours across midnight
+% COLUMNS=60
+$ timeline "2026-11-26 23:10||a" "2026-11-27 01:20||b"
+|  2026-11-26 23:10      00:00                     01:00
+|  *--------------------------------------------------------*
+
+[plain] timeline: days on the axis
+% COLUMNS=60
+$ timeline "2026-11-01|Rome|" "2026-11-03|Rome|" "2026-11-09|Oslo|" "2026-11-20|Oslo|"
+|        2026-11-01                    11-12
+|  Rome  *----*
+|  Oslo                       *-----------------------------*
+
+[plain] timeline: every day has room on a wide axis
+% COLUMNS=100
+$ timeline "2026-02-26||" "2026-03-03||"
+|  2026-02-26         02-27               02-28              03-01               03-02
+|  *------------------------------------------------------------------------------------------------*
+
+[plain] timeline: months on the axis
+% COLUMNS=60
+$ timeline "2026-03-01|Rome|" "2026-05-03|Rome|" "2026-08-09|Oslo|" "2026-11-20|Oslo|"
+|        2026-03     2026-05     2026-07     2026-09
+|  Rome  *-----------*
+|  Oslo                                 *-------------------*
+
+[plain] timeline: months across a new year
+% COLUMNS=90
+$ timeline "2025-10-20|a|" "2026-03-02|a|"
+|     2025-10                    2025-12            2026-01             2026-02
+|  a  *-----------------------------------------------------------------------------------*
+
+[plain] timeline: years before 1970
+% COLUMNS=60
+$ timeline "1961-04-12|Space|Gagarin" "1969-07-20|Space|Apollo 11" "1957-10-04|Space|Sputnik"
+|         1957      1960    1962    1964     1966    1968
+|  Space  *--------------*----------------------------------*
+
+[plain] timeline: centuries
+% COLUMNS=60
+$ timeline "0800-01-01|Rome|" "1453-05-29|Rome|fall" "2026-01-01|Now|"
+|        0800    1000     1200    1400    1600     1800
+|  Rome  *--------------------------*
+|  Now                                                      *
+
+[plain] timeline: one event
+$ timeline "2026-03-01|Rome|only"
+|        2026-03-01
+|  Rome  *
+
+[plain] timeline: one event, one row per event
+$ timeline -v "2026-03-01|Rome|only"
+|  *  2026-03-01  Rome  only
+
+[plain] timeline: events at the same moment
+% COLUMNS=40
+$ timeline "2026-03-01|a|x" "2026-03-01|b|y" "2026-03-01|a|z"
+|     2026-03-01
+|  a  #
+|  b  *
+
+[plain] timeline: events at the same moment keep their order
+$ timeline -v "2026-03-02|a|late" "2026-03-01|b|first" "2026-03-01|a|second" "2026-03-01|b|third"
+|  *    2026-03-01  b  first
+|  | *  2026-03-01  a  second
+|  * |  2026-03-01  b  third
+|    *  2026-03-02  a  late
+
+[rich] timeline: several events in one column
+% COLUMNS=60
+% NO_COLOR=1
+$ timeline "2026-01-01|a|" "2026-01-02|a|" "2026-01-02|a|" "2026-12-30|a|" "2026-12-31|b|x|a"
+|     2026-01      2026-04       2026-07       2026-10
+|  a  ◉─────────────────────────────────────────────────────●
+|  b                                                        ●
+
+[plain] timeline: several events in one column
+% COLUMNS=60
+$ timeline "2026-01-01|a|" "2026-01-02|a|" "2026-01-02|a|" "2026-12-30|a|" "2026-12-31|b|x|a"
+|     2026-01      2026-04       2026-07       2026-10
+|  a  #-----------------------------------------------------*
+|  b                                                        *
+
+[plain] timeline: another separator, two links in one column
+% COLUMNS=60
+$ timeline -s , "2026-01-01, a , one" "2026-06-01,b,two,a" "2026-06-01,c,three,a"
+|     2026-01    2026-02   2026-03    2026-04    2026-05
+|  a  *-----------------------------------------------------+
+|  b                                                        *
+|  c                                                        *
+
+[plain] timeline: another separator, one row per event
+$ timeline -v -s , "2026-01-01, a , one" "2026-06-01,b,two,a" "2026-06-01,c,three,a"
+|  *      2026-01-01  a  one
+|  +-*    2026-06-01  b  two
+|  +---*  2026-06-01  c  three
+
+[plain] timeline: nothing to show
+$ timeline
+
+[plain] timeline: empty rows are skipped
+$ timeline -v "" "||" "2026-01-01|a|x" " | | "
+|  *  2026-01-01  a  x
+
+[plain] timeline: a link from a track without events
+% COLUMNS=50
+$ timeline "2025-01-01|x|a" "2026-01-01|y|b|ghost"
+|         2025-01   2025-04   2025-07   2025-10
+|  x      *
+|  y                                              *
+|  ghost                                          |
+
+[plain] timeline: a link from a track without events, one row per event
+$ timeline -v "2025-01-01|x|a" "2026-01-01|y|b|ghost"
+|  *      2025-01-01  x  a
+|    *--  2026-01-01  y  b
+
+[agent] timeline: a link from a track without events
+$ timeline "2025-01-01|x|a" "2026-01-01|y||ghost"
+|2025-01-01\tx\ta
+|2026-01-01\ty\t\tfrom: ghost
+
+[plain] timeline: a link to its own track is no link
+$ timeline -v "1|a|x" "2|a|y|a"
+|  *  1  a  x
+|  *  2  a  y
+
+[rich] timeline: forks and merges along an axis
+% COLUMNS=60
+% NO_COLOR=1
+$ timeline "2026-01-05|main|start" "2026-01-10|up|fork up|main" "2026-01-12|down|fork down|main" "2026-01-20|main|work" "2026-02-01|main|merge up|up" "2026-02-10|main|merge down|down" "2026-02-20|main|end"
+|        2026-01-05         01-22   01-29  02-05   02-12
+|  main  ●─────┬─┬────────●────────────●─────────●──────────●
+|  up          ●─┼─────────────────────╯         │
+|  down          ●───────────────────────────────╯
+
+[rich] timeline: forks and merges, one row per event
+% NO_COLOR=1
+$ timeline -v "2026-01-05|main|start" "2026-01-10|up|fork up|main" "2026-01-12|down|fork down|main" "2026-01-20|main|work" "2026-02-01|main|merge up|up" "2026-02-10|main|merge down|down" "2026-02-20|main|end"
+|  ●      2026-01-05  main  start
+|  ├─●    2026-01-10  up    fork up
+|  ├─┼─●  2026-01-12  down  fork down
+|  ● │ │  2026-01-20  main  work
+|  ●─╯ │  2026-02-01  main  merge up
+|  ●───╯  2026-02-10  main  merge down
+|  ●      2026-02-20  main  end
+
+[rich] timeline: forks and merges, newest first
+% NO_COLOR=1
+$ timeline -v -r "2026-01-05|main|start" "2026-01-10|up|fork up|main" "2026-01-12|down|fork down|main" "2026-01-20|main|work" "2026-02-01|main|merge up|up" "2026-02-10|main|merge down|down" "2026-02-20|main|end"
+|  ●      2026-02-20  main  end
+|  ●───╮  2026-02-10  main  merge down
+|  ●─╮ │  2026-02-01  main  merge up
+|  ● │ │  2026-01-20  main  work
+|  ├─┼─●  2026-01-12  down  fork down
+|  ├─●    2026-01-10  up    fork up
+|  ●      2026-01-05  main  start
+
+[rich] timeline: forks and merges in colour
+% COLUMNS=50
+$ timeline "2026-01-05|main|start" "2026-01-10|up|fork up|main" "2026-01-12|down|fork down|main" "2026-01-20|main|work" "2026-02-01|main|merge up|up" "2026-02-10|main|merge down|down" "2026-02-20|main|end"
+|        \e[2m2026-01-05           01-29        02-12\e[0m
+|  \e[36mmain  ●───┬─┬──────●──────────●───────●────────●\e[0m
+|  \e[35mup        ●─┼─────────────────╯       │\e[0m
+|  \e[33mdown        ●─────────────────────────╯\e[0m
+
+[rich] timeline: links from tracks that go on
+% COLUMNS=60
+% NO_COLOR=1
+$ timeline "2026-01-05|up|a" "2026-01-06|main|b" "2026-01-07|down|c" "2026-01-10|main|takes up, which goes on|up" "2026-01-12|main|takes down, which goes on|down" "2026-01-20|up|d" "2026-01-21|down|e" "2026-01-22|main|f"
+|        2026-01-05                    01-15
+|  up    ●──────────────┬─────────────────────────────●
+|  main     ●───────────●─────●─────────────────────────────●
+|  down        ●──────────────┴──────────────────────────●
+
+[rich] timeline: links from tracks that go on, one row per event
+% NO_COLOR=1
+$ timeline -v "2026-01-05|up|a" "2026-01-06|main|b" "2026-01-07|down|c" "2026-01-10|main|takes up, which goes on|up" "2026-01-12|main|takes down, which goes on|down" "2026-01-20|up|d" "2026-01-21|down|e" "2026-01-22|main|f"
+|  ●      2026-01-05  up    a
+|  │ ●    2026-01-06  main  b
+|  │ │ ●  2026-01-07  down  c
+|  ├─● │  2026-01-10  main  takes up, which goes on
+|  │ ●─┤  2026-01-12  main  takes down, which goes on
+|  ● │ │  2026-01-20  up    d
+|    │ ●  2026-01-21  down  e
+|    ●    2026-01-22  main  f
+
+[rich] timeline: a long label is cut for a terminal only
+% COLUMNS=40
+% NO_COLOR=1
+$ timeline -v "2026-01-01|main|A long label that does not fit in forty columns" "2026-01-02|main|Short"
+|  ●  2026-01-01  main  A long label tha…
+|  ●  2026-01-02  main  Short
+
+[plain] timeline: a long label is cut for a terminal only
+% COLUMNS=40
+$ timeline -v "2026-01-01|main|A long label that does not fit in forty columns" "2026-01-02|main|Short"
+|  *  2026-01-01  main  A long label that does not fit in forty columns
+|  *  2026-01-02  main  Short
+
+[rich] timeline: a label is never cut below four
+% COLUMNS=10
+% NO_COLOR=1
+$ timeline -v "2026-01-01|main|Unbreakable"
+|  ●  2026-01-01  main  Unb…
+
+[rich] timeline: a long track name is cut
+% COLUMNS=30
+% NO_COLOR=1
+$ timeline "2026-01-01|A track with a very long name|" "2026-06-01|b|"
+|              2026-01
+|  A track w…  ●
+|  b                          ●
+
+[rich] timeline: the axis is never shorter than ten
+% COLUMNS=12
+% NO_COLOR=1
+$ timeline "1|track|" "2|track|" "9|track|"
+|         1        9
+|  track  ●●───────●
+
+[plain] timeline: some rows have no label, some no track
+$ timeline -v "1|a|" "2|b|" "3||" "4||x"
+|  *      1  a
+|    *    2  b
+|      *  3
+|      *  4     x
+
+[plain] timeline: time zones are read and ignored
+$ timeline -v "2026-11-26 10:00 +0100||c" "2026-11-26+01:00||a" "2026-11-26T09:00Z||b" "2026-11-26T10:00:30-05:00||d"
+|  *  2026-11-26+01:00           a
+|  *  2026-11-26T09:00Z          b
+|  *  2026-11-26 10:00 +0100     c
+|  *  2026-11-26T10:00:30-05:00  d
+
+[plain] timeline: a time that is not written in full makes it text
+$ timeline -v "2026-11-26 9:00||b" "2026-11-25||a"
+|  *  2026-11-26 9:00  b
+|  *  2026-11-25       a
+
+[agent] timeline: no labels
+$ timeline "2026-01-02|b" "2026-01-01|a"
+|2026-01-01\ta
+|2026-01-02\tb
+
+[plain] timeline: only dates
+% COLUMNS=30
+$ timeline "2026-01-02" "2026-01-09"
+|  2026-01-02  01-05  01-07
+|  *--------------------------*
+
+[plain] timeline: only dates, one row per event
+$ timeline -v "2026-01-09" "2026-01-02"
+|  *  2026-01-02
+|  *  2026-01-09
+
+[plain] tree
+$ tree "src/main.rs | 1.2 KB" src/lib/x.rs "README.md | readme" "src/lib/y.rs|300 B"
+|src/
+||-- main.rs   1.2 KB
+|`-- lib/
+|    |-- x.rs
+|    `-- y.rs  300 B
+|README.md     readme
+
+[agent] tree
+$ tree "src/main.rs | 1.2 KB" src/lib/x.rs "README.md | readme" "src/lib/y.rs|300 B"
+|src/
+| main.rs\t1.2 KB
+| lib/
+|  x.rs
+|  y.rs\t300 B
+|README.md\treadme
+
+[rich] tree
+$ tree "src/main.rs | 1.2 KB" src/lib/x.rs "README.md | readme" "src/lib/y.rs|300 B"
+|\e[34msrc/\e[0m
+|\e[2m├── \e[0mmain.rs   \e[2m1.2 KB\e[0m
+|\e[2m╰── \e[0m\e[34mlib/\e[0m
+|\e[2m    ├── \e[0mx.rs
+|\e[2m    ╰── \e[0my.rs  \e[2m300 B\e[0m
+|README.md     \e[2mreadme\e[0m
+
+[rich] tree without colour
+% NO_COLOR=1
+$ tree "src/main.rs | 1.2 KB" src/lib/x.rs "README.md | readme" "src/lib/y.rs|300 B"
+|src/
+|├── main.rs   1.2 KB
+|╰── lib/
+|    ├── x.rs
+|    ╰── y.rs  300 B
+|README.md     readme
+
+[plain] tree: a depth
+$ tree -d 2 "a/b/c/d | deep" a/b/e "a/f | 1" g
+|a/
+||-- b/ ...
+|`-- f  1
+|g
+
+[agent] tree: a depth
+$ tree -d 2 "a/b/c/d | deep" a/b/e "a/f | 1" g
+|a/
+| b/ ...
+| f\t1
+|g
+
+[rich] tree: a depth
+$ tree -d 1 "a/b/c/d | deep" "a/f | 1" "g | 22"
+|\e[34ma/\e[0m \e[2m…\e[0m
+|g  \e[2m22\e[0m
+
+[plain] tree: a depth of nought shows everything
+$ tree -d 0 a/b/c
+|a/
+|`-- b/
+|    `-- c
+
+[plain] tree: nothing in, nothing out
+$ tree
+
+[plain] tree: children stay together, in the order they first appear
+$ tree b/x a/y b/z a b/x
+|b/
+||-- x
+|`-- z
+|a/
+|`-- y
+
+[plain] tree: slashes and dots
+$ tree docs/ /abs/x ./a//b . / a/./c/
+|docs/
+|/abs/
+|`-- x
+|a/
+||-- b
+|`-- c/
+
+[plain] tree: three levels of lines
+$ tree a/b/c/d a/b/e a/f g/h/i g/j
+|a/
+||-- b/
+||   |-- c/
+||   |   `-- d
+||   `-- e
+|`-- f
+|g/
+||-- h/
+||   `-- i
+|`-- j
+
+[plain] tree: another separator, more cells than two
+$ tree -s , "a/b, note, extra" "a/c ,x"
+|a/
+||-- b  note
+|`-- c  x
+
+[plain] tree: the first note counts, a directory may have one
+$ tree "a/ | dir" "a/b | x" "a/b | y" "a/c" "a/c | late"
+|a/     dir
+||-- b  x
+|`-- c  late
+
+[plain] tree: notes line up after the longest name that has one
+$ tree "a | 1" "a-very-long-name-without-a-note" "dir/bb | 2" "dir/c"
+|a       1
+|a-very-long-name-without-a-note
+|dir/
+||-- bb  2
+|`-- c
+
+[agent] tree: notes
+$ tree "a/ | dir" "a/b | x" "c"
+|a/\tdir
+| b\tx
+|c
+
+[plain] tree: characters, not bytes
+$ tree "é/ü | 1" "é/abc | 2"
+|é/
+||-- ü    1
+|`-- abc  2
+
+[plain] tree of a directory
+$ tree -p files
+|files/
+||-- docs/
+||   |-- img/
+||   |   `-- logo.txt
+||   `-- guide.md
+||-- empty/
+||-- src/
+||   |-- lib.rs
+||   `-- main.rs
+|`-- README.md
+
+[agent] tree of a directory
+$ tree -p files
+|files/
+| docs/
+|  img/
+|   logo.txt
+|  guide.md
+| empty/
+| src/
+|  lib.rs
+|  main.rs
+| README.md
+
+[rich] tree of a directory
+$ tree -p files
+|\e[34mfiles/\e[0m
+|\e[2m├── \e[0m\e[34mdocs/\e[0m
+|\e[2m│   ├── \e[0m\e[34mimg/\e[0m
+|\e[2m│   │   ╰── \e[0mlogo.txt
+|\e[2m│   ╰── \e[0mguide.md
+|\e[2m├── \e[0m\e[34mempty/\e[0m
+|\e[2m├── \e[0m\e[34msrc/\e[0m
+|\e[2m│   ├── \e[0mlib.rs
+|\e[2m│   ╰── \e[0mmain.rs
+|\e[2m╰── \e[0mREADME.md
+
+[plain] tree of a directory: hidden files
+$ tree -a -p files/
+|files/
+||-- docs/
+||   |-- img/
+||   |   `-- logo.txt
+||   `-- guide.md
+||-- empty/
+||   `-- .keep
+||-- src/
+||   |-- lib.rs
+||   `-- main.rs
+||-- .hidden
+|`-- README.md
+
+[plain] tree of a directory: a depth counts the levels under it
+$ tree -d 1 -p files
+|files/
+||-- docs/ ...
+||-- empty/
+||-- src/ ...
+|`-- README.md
+
+[plain] tree of a directory: a depth, hidden files
+$ tree -a -d 1 -p files
+|files/
+||-- docs/ ...
+||-- empty/ ...
+||-- src/ ...
+||-- .hidden
+|`-- README.md
+
+[agent] tree of a directory: a depth
+$ tree -d 1 -p files
+|files/
+| docs/ ...
+| empty/
+| src/ ...
+| README.md
+
+[plain] tree of a directory: a path in two parts
+$ tree -p ./files/docs
+|./files/docs/
+||-- img/
+||   `-- logo.txt
+|`-- guide.md
+
+[plain] tree: not a directory
+$ tree -p files/README.md
+![ERROR] tree: not a directory: files/README.md
+= 1
+
+[agent] tree: not a directory
+$ tree -p nowhere
+!error: tree: not a directory: nowhere
+= 1
+
+[rich] keys: browse, a file at the top
+% CLI_INTERACTIVE=1
+$ browse Open files
+< jjjj
+|files/README.md
+!\e[36m?\e[0m \e[1mOpen\e[0m  \e[2m↑/↓ move, → open, ← close, enter select, . hidden files\e[0m
+!\e[36m❯\e[0m \e[1m\e[34mfiles/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34mdocs/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34mempty/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34msrc/\e[0m\e[K
+!  \e[2m╰── \e[0mREADME.md\e[K
+!\e[J\e[5A  \e[34mfiles/\e[0m\e[K
+!\e[36m❯\e[0m \e[2m├── \e[0m\e[1m\e[34mdocs/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34mempty/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34msrc/\e[0m\e[K
+!  \e[2m╰── \e[0mREADME.md\e[K
+!\e[J\e[5A  \e[34mfiles/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34mdocs/\e[0m\e[K
+!\e[36m❯\e[0m \e[2m├── \e[0m\e[1m\e[34mempty/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34msrc/\e[0m\e[K
+!  \e[2m╰── \e[0mREADME.md\e[K
+!\e[J\e[5A  \e[34mfiles/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34mdocs/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34mempty/\e[0m\e[K
+!\e[36m❯\e[0m \e[2m├── \e[0m\e[1m\e[34msrc/\e[0m\e[K
+!  \e[2m╰── \e[0mREADME.md\e[K
+!\e[J\e[5A  \e[34mfiles/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34mdocs/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34mempty/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34msrc/\e[0m\e[K
+!\e[36m❯\e[0m \e[2m╰── \e[0m\e[1mREADME.md\e[0m\e[K
+!\e[J\e[6A\e[J\e[32m✓\e[0m Open \e[2m›\e[0m files/README.md
+
+[rich] keys: browse, open a directory and choose inside
+% CLI_INTERACTIVE=1
+$ browse Open files
+< j\e[Cjj
+|files/docs/guide.md
+!\e[36m?\e[0m \e[1mOpen\e[0m  \e[2m↑/↓ move, → open, ← close, enter select, . hidden files\e[0m
+!\e[36m❯\e[0m \e[1m\e[34mfiles/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34mdocs/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34mempty/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34msrc/\e[0m\e[K
+!  \e[2m╰── \e[0mREADME.md\e[K
+!\e[J\e[5A  \e[34mfiles/\e[0m\e[K
+!\e[36m❯\e[0m \e[2m├── \e[0m\e[1m\e[34mdocs/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34mempty/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34msrc/\e[0m\e[K
+!  \e[2m╰── \e[0mREADME.md\e[K
+!\e[J\e[5A  \e[34mfiles/\e[0m\e[K
+!\e[36m❯\e[0m \e[2m├── \e[0m\e[1m\e[34mdocs/\e[0m\e[K
+!  \e[2m│   ├── \e[0m\e[34mimg/\e[0m\e[K
+!  \e[2m│   ╰── \e[0mguide.md\e[K
+!  \e[2m├── \e[0m\e[34mempty/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34msrc/\e[0m\e[K
+!  \e[2m╰── \e[0mREADME.md\e[K
+!\e[J\e[7A  \e[34mfiles/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34mdocs/\e[0m\e[K
+!\e[36m❯\e[0m \e[2m│   ├── \e[0m\e[1m\e[34mimg/\e[0m\e[K
+!  \e[2m│   ╰── \e[0mguide.md\e[K
+!  \e[2m├── \e[0m\e[34mempty/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34msrc/\e[0m\e[K
+!  \e[2m╰── \e[0mREADME.md\e[K
+!\e[J\e[7A  \e[34mfiles/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34mdocs/\e[0m\e[K
+!  \e[2m│   ├── \e[0m\e[34mimg/\e[0m\e[K
+!\e[36m❯\e[0m \e[2m│   ╰── \e[0m\e[1mguide.md\e[0m\e[K
+!  \e[2m├── \e[0m\e[34mempty/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34msrc/\e[0m\e[K
+!  \e[2m╰── \e[0mREADME.md\e[K
+!\e[J\e[8A\e[J\e[32m✓\e[0m Open \e[2m›\e[0m files/docs/guide.md
+
+[rich] keys: browse without colour
+% CLI_INTERACTIVE=1
+% NO_COLOR=1
+$ browse Open files
+< j\e[Cjj
+|files/docs/guide.md
+!? Open  ↑/↓ move, → open, ← close, enter select, . hidden files
+!❯ files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!❯ ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!❯ ├── docs/\e[K
+!  │   ├── img/\e[K
+!  │   ╰── guide.md\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[7A  files/\e[K
+!  ├── docs/\e[K
+!❯ │   ├── img/\e[K
+!  │   ╰── guide.md\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[7A  files/\e[K
+!  ├── docs/\e[K
+!  │   ├── img/\e[K
+!❯ │   ╰── guide.md\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[8A\e[J✓ Open › files/docs/guide.md
+
+[rich] keys: browse, enter opens and closes a directory
+% CLI_INTERACTIVE=1
+% NO_COLOR=1
+$ browse Open files
+< j
+<
+< jjjj
+!? Open  ↑/↓ move, → open, ← close, enter select, . hidden files
+!❯ files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!❯ ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!❯ ├── docs/\e[K
+!  │   ├── img/\e[K
+!  │   ╰── guide.md\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[7A  files/\e[K
+!❯ ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!  ├── docs/\e[K
+!❯ ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!❯ ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!❯ ╰── README.md\e[K
+!\e[J\e[5A❯ files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A❯ files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[6A\e[J✗ Open (cancelled)
+= 1
+
+[rich] keys: browse, space opens and closes
+% CLI_INTERACTIVE=1
+% NO_COLOR=1
+$ browse Open files
+< jjj\s\sj
+|files/README.md
+!? Open  ↑/↓ move, → open, ← close, enter select, . hidden files
+!❯ files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!❯ ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!  ├── docs/\e[K
+!❯ ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!❯ ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!❯ ├── src/\e[K
+!  │   ├── lib.rs\e[K
+!  │   ╰── main.rs\e[K
+!  ╰── README.md\e[K
+!\e[J\e[7A  files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!❯ ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!❯ ╰── README.md\e[K
+!\e[J\e[6A\e[J✓ Open › files/README.md
+
+[rich] keys: browse, right on an open directory steps inside
+% CLI_INTERACTIVE=1
+% NO_COLOR=1
+$ browse Open files
+< jllll
+|files/docs/img/logo.txt
+!? Open  ↑/↓ move, → open, ← close, enter select, . hidden files
+!❯ files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!❯ ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!❯ ├── docs/\e[K
+!  │   ├── img/\e[K
+!  │   ╰── guide.md\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[7A  files/\e[K
+!  ├── docs/\e[K
+!❯ │   ├── img/\e[K
+!  │   ╰── guide.md\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[7A  files/\e[K
+!  ├── docs/\e[K
+!❯ │   ├── img/\e[K
+!  │   │   ╰── logo.txt\e[K
+!  │   ╰── guide.md\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[8A  files/\e[K
+!  ├── docs/\e[K
+!  │   ├── img/\e[K
+!❯ │   │   ╰── logo.txt\e[K
+!  │   ╰── guide.md\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[9A\e[J✓ Open › files/docs/img/logo.txt
+
+[rich] keys: browse, left closes, then goes to the directory around
+% CLI_INTERACTIVE=1
+% NO_COLOR=1
+$ browse Open files
+< jljhhhjjjj
+|files/README.md
+!? Open  ↑/↓ move, → open, ← close, enter select, . hidden files
+!❯ files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!❯ ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!❯ ├── docs/\e[K
+!  │   ├── img/\e[K
+!  │   ╰── guide.md\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[7A  files/\e[K
+!  ├── docs/\e[K
+!❯ │   ├── img/\e[K
+!  │   ╰── guide.md\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[7A  files/\e[K
+!❯ ├── docs/\e[K
+!  │   ├── img/\e[K
+!  │   ╰── guide.md\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[7A  files/\e[K
+!❯ ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A❯ files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!❯ ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!  ├── docs/\e[K
+!❯ ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!❯ ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!❯ ╰── README.md\e[K
+!\e[J\e[6A\e[J✓ Open › files/README.md
+
+[rich] keys: browse, left on a file goes to its directory
+% CLI_INTERACTIVE=1
+% NO_COLOR=1
+$ browse -d Open files
+< jlj\e[D
+|files/docs
+!? Open  ↑/↓ move, → open, ← close, enter select, . hidden files
+!❯ files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ╰── src/\e[K
+!\e[J\e[4A  files/\e[K
+!❯ ├── docs/\e[K
+!  ├── empty/\e[K
+!  ╰── src/\e[K
+!\e[J\e[4A  files/\e[K
+!❯ ├── docs/\e[K
+!  │   ╰── img/\e[K
+!  ├── empty/\e[K
+!  ╰── src/\e[K
+!\e[J\e[5A  files/\e[K
+!  ├── docs/\e[K
+!❯ │   ╰── img/\e[K
+!  ├── empty/\e[K
+!  ╰── src/\e[K
+!\e[J\e[5A  files/\e[K
+!❯ ├── docs/\e[K
+!  │   ╰── img/\e[K
+!  ├── empty/\e[K
+!  ╰── src/\e[K
+!\e[J\e[6A\e[J✓ Open › files/docs
+
+[rich] keys: browse, hidden files
+% CLI_INTERACTIVE=1
+% NO_COLOR=1
+$ browse Open files
+< .\e[F
+|files/README.md
+!? Open  ↑/↓ move, → open, ← close, enter select, . hidden files
+!❯ files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A❯ files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ├── .hidden\e[K
+!  ╰── README.md\e[K
+!\e[J\e[6A  files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ├── .hidden\e[K
+!❯ ╰── README.md\e[K
+!\e[J\e[7A\e[J✓ Open › files/README.md
+
+[rich] keys: browse, hidden files from the start, switched off on one
+% CLI_INTERACTIVE=1
+% NO_COLOR=1
+$ browse -a Open files
+< jjl\e[B.
+!? Open  ↑/↓ move, → open, ← close, enter select, . hidden files
+!❯ files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ├── .hidden\e[K
+!  ╰── README.md\e[K
+!\e[J\e[6A  files/\e[K
+!❯ ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ├── .hidden\e[K
+!  ╰── README.md\e[K
+!\e[J\e[6A  files/\e[K
+!  ├── docs/\e[K
+!❯ ├── empty/\e[K
+!  ├── src/\e[K
+!  ├── .hidden\e[K
+!  ╰── README.md\e[K
+!\e[J\e[6A  files/\e[K
+!  ├── docs/\e[K
+!❯ ├── empty/\e[K
+!  │   ╰── .keep\e[K
+!  ├── src/\e[K
+!  ├── .hidden\e[K
+!  ╰── README.md\e[K
+!\e[J\e[7A  files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!❯ │   ╰── .keep\e[K
+!  ├── src/\e[K
+!  ├── .hidden\e[K
+!  ╰── README.md\e[K
+!\e[J\e[7A  files/\e[K
+!  ├── docs/\e[K
+!❯ ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!  ├── docs/\e[K
+!❯ ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[6A\e[J✗ Open (cancelled)
+= 1
+
+[rich] keys: browse, a directory
+% CLI_INTERACTIVE=1
+% NO_COLOR=1
+$ browse -d Where files
+< j
+|files/docs
+!? Where  ↑/↓ move, → open, ← close, enter select, . hidden files
+!❯ files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ╰── src/\e[K
+!\e[J\e[4A  files/\e[K
+!❯ ├── docs/\e[K
+!  ├── empty/\e[K
+!  ╰── src/\e[K
+!\e[J\e[5A\e[J✓ Where › files/docs
+
+[rich] keys: browse, the directory itself
+% CLI_INTERACTIVE=1
+% NO_COLOR=1
+$ browse -d Where files/
+<
+|files
+!? Where  ↑/↓ move, → open, ← close, enter select, . hidden files
+!❯ files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ╰── src/\e[K
+!\e[J\e[5A\e[J✓ Where › files
+
+[rich] keys: browse, enter on the top does nothing
+% CLI_INTERACTIVE=1
+% NO_COLOR=1
+$ browse Open files/docs
+<
+< \s
+< jj
+|files/docs/guide.md
+!? Open  ↑/↓ move, → open, ← close, enter select, . hidden files
+!❯ files/docs/\e[K
+!  ├── img/\e[K
+!  ╰── guide.md\e[K
+!\e[J\e[3A❯ files/docs/\e[K
+!  ├── img/\e[K
+!  ╰── guide.md\e[K
+!\e[J\e[3A❯ files/docs/\e[K
+!  ├── img/\e[K
+!  ╰── guide.md\e[K
+!\e[J\e[3A❯ files/docs/\e[K
+!  ├── img/\e[K
+!  ╰── guide.md\e[K
+!\e[J\e[3A  files/docs/\e[K
+!❯ ├── img/\e[K
+!  ╰── guide.md\e[K
+!\e[J\e[3A  files/docs/\e[K
+!  ├── img/\e[K
+!❯ ╰── guide.md\e[K
+!\e[J\e[4A\e[J✓ Open › files/docs/guide.md
+
+[rich] keys: browse, up a directory
+% CLI_INTERACTIVE=1
+% NO_COLOR=1
+$ browse Open files/docs/img
+< hh\e[F
+|files/docs/guide.md
+!? Open  ↑/↓ move, → open, ← close, enter select, . hidden files
+!❯ files/docs/img/\e[K
+!  ╰── logo.txt\e[K
+!\e[J\e[2A  files/docs/\e[K
+!❯ ├── img/\e[K
+!  │   ╰── logo.txt\e[K
+!  ╰── guide.md\e[K
+!\e[J\e[4A  files/docs/\e[K
+!❯ ├── img/\e[K
+!  ╰── guide.md\e[K
+!\e[J\e[3A  files/docs/\e[K
+!  ├── img/\e[K
+!❯ ╰── guide.md\e[K
+!\e[J\e[4A\e[J✓ Open › files/docs/guide.md
+
+[rich] keys: browse, up from a directory named with ..
+% CLI_INTERACTIVE=1
+% NO_COLOR=1
+$ browse -d Where files/docs/..
+< h
+|files/docs/../../files
+!? Where  ↑/↓ move, → open, ← close, enter select, . hidden files
+!❯ files/docs/../\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ╰── src/\e[K
+!\e[J\e[4A  files/docs/../../\e[K
+!❯ ╰── files/\e[K
+!      ├── docs/\e[K
+!      ├── empty/\e[K
+!      ╰── src/\e[K
+!\e[J\e[6A\e[J✓ Where › files/docs/../../files
+
+[rich] keys: browse, a leading ./ is dropped
+% CLI_INTERACTIVE=1
+% NO_COLOR=1
+$ browse Open ./files/src
+< j
+|files/src/lib.rs
+!? Open  ↑/↓ move, → open, ← close, enter select, . hidden files
+!❯ ./files/src/\e[K
+!  ├── lib.rs\e[K
+!  ╰── main.rs\e[K
+!\e[J\e[3A  ./files/src/\e[K
+!❯ ├── lib.rs\e[K
+!  ╰── main.rs\e[K
+!\e[J\e[4A\e[J✓ Open › files/src/lib.rs
+
+[rich] keys: browse, home, end, around the ends
+% CLI_INTERACTIVE=1
+% NO_COLOR=1
+$ browse Open files
+< k\e[Hk\e[Fj\t\e[Z\e[Z
+|files/README.md
+!? Open  ↑/↓ move, → open, ← close, enter select, . hidden files
+!❯ files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!❯ ╰── README.md\e[K
+!\e[J\e[5A❯ files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!❯ ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!❯ ╰── README.md\e[K
+!\e[J\e[5A❯ files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!❯ ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A❯ files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!❯ ╰── README.md\e[K
+!\e[J\e[6A\e[J✓ Open › files/README.md
+
+[rich] keys: browse, a long tree scrolls
+% CLI_INTERACTIVE=1
+% NO_COLOR=1
+% CLI_PAGE=3
+$ browse Open files
+< jljlj\e[F
+|files/README.md
+!? Open  ↑/↓ move, → open, ← close, enter select, . hidden files
+!❯ files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  1-3 of 5\e[K
+!\e[J\e[4A  files/\e[K
+!❯ ├── docs/\e[K
+!  ├── empty/\e[K
+!  1-3 of 5\e[K
+!\e[J\e[4A  files/\e[K
+!❯ ├── docs/\e[K
+!  │   ├── img/\e[K
+!  1-3 of 7\e[K
+!\e[J\e[4A  files/\e[K
+!  ├── docs/\e[K
+!❯ │   ├── img/\e[K
+!  1-3 of 7\e[K
+!\e[J\e[4A  files/\e[K
+!  ├── docs/\e[K
+!❯ │   ├── img/\e[K
+!  1-3 of 8\e[K
+!\e[J\e[4A  ├── docs/\e[K
+!  │   ├── img/\e[K
+!❯ │   │   ╰── logo.txt\e[K
+!  2-4 of 8\e[K
+!\e[J\e[4A  ├── empty/\e[K
+!  ├── src/\e[K
+!❯ ╰── README.md\e[K
+!  6-8 of 8\e[K
+!\e[J\e[5A\e[J✓ Open › files/README.md
+
+[rich] keys: browse, a narrow terminal
+% CLI_INTERACTIVE=1
+% NO_COLOR=1
+% COLUMNS=16
+$ browse Open files
+< jljlj
+|files/docs/img/logo.txt
+!? Open  ↑/↓ move, → open, ← close, enter select, . hidden files
+!❯ files/\e[K
+!  ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!❯ ├── docs/\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[5A  files/\e[K
+!❯ ├── docs/\e[K
+!  │   ├── img/\e[K
+!  │   ╰── guide\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[7A  files/\e[K
+!  ├── docs/\e[K
+!❯ │   ├── img/\e[K
+!  │   ╰── guide\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[7A  files/\e[K
+!  ├── docs/\e[K
+!❯ │   ├── img/\e[K
+!  │   │   ╰── l\e[K
+!  │   ╰── guide\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[8A  files/\e[K
+!  ├── docs/\e[K
+!  │   ├── img/\e[K
+!❯ │   │   ╰── l\e[K
+!  │   ╰── guide\e[K
+!  ├── empty/\e[K
+!  ├── src/\e[K
+!  ╰── README.md\e[K
+!\e[J\e[9A\e[J✓ Open › files/docs/img/logo.txt
+
+[rich] keys: browse, escape
+% CLI_INTERACTIVE=1
+$ browse Open files
+< j\e
+!\e[36m?\e[0m \e[1mOpen\e[0m  \e[2m↑/↓ move, → open, ← close, enter select, . hidden files\e[0m
+!\e[36m❯\e[0m \e[1m\e[34mfiles/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34mdocs/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34mempty/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34msrc/\e[0m\e[K
+!  \e[2m╰── \e[0mREADME.md\e[K
+!\e[J\e[5A  \e[34mfiles/\e[0m\e[K
+!\e[36m❯\e[0m \e[2m├── \e[0m\e[1m\e[34mdocs/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34mempty/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34msrc/\e[0m\e[K
+!  \e[2m╰── \e[0mREADME.md\e[K
+!\e[J\e[6A\e[J\e[2m✗ Open (cancelled)\e[0m
+= 3
+
+[rich] keys: browse, no input
+% CLI_INTERACTIVE=1
+$ browse Open files
+!\e[36m?\e[0m \e[1mOpen\e[0m  \e[2m↑/↓ move, → open, ← close, enter select, . hidden files\e[0m
+!\e[36m❯\e[0m \e[1m\e[34mfiles/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34mdocs/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34mempty/\e[0m\e[K
+!  \e[2m├── \e[0m\e[34msrc/\e[0m\e[K
+!  \e[2m╰── \e[0mREADME.md\e[K
+!\e[J\e[6A\e[J\e[2m✗ Open (cancelled)\e[0m
+= 1
+
+[rich] keys: browse, not a directory
+% CLI_INTERACTIVE=1
+$ browse Open files/README.md
+!\e[31m✗\e[0m Open: not a directory: files/README.md
+= 2
+
+[rich] keys: browse a list
+% CLI_INTERACTIVE=1
+$ browse -l Restore "Photos/2024/a.jpg | 2.1 MB" "Photos/2024/b.jpg | 1.8 MB" "Notes/todo.txt | 4 KB" "readme | 1 KB"
+< ljlj
+|Photos/2024/a.jpg
+!\e[36m?\e[0m \e[1mRestore\e[0m  \e[2m↑/↓ move, → open, ← close, enter select\e[0m
+!\e[36m❯\e[0m \e[1m\e[34mPhotos/\e[0m\e[K
+!  \e[34mNotes/\e[0m\e[K
+!  readme  \e[2m1 KB\e[0m\e[K
+!\e[J\e[3A\e[36m❯\e[0m \e[1m\e[34mPhotos/\e[0m\e[K
+!  \e[2m╰── \e[0m\e[34m2024/\e[0m\e[K
+!  \e[34mNotes/\e[0m\e[K
+!  readme  \e[2m1 KB\e[0m\e[K
+!\e[J\e[4A  \e[34mPhotos/\e[0m\e[K
+!\e[36m❯\e[0m \e[2m╰── \e[0m\e[1m\e[34m2024/\e[0m\e[K
+!  \e[34mNotes/\e[0m\e[K
+!  readme  \e[2m1 KB\e[0m\e[K
+!\e[J\e[4A  \e[34mPhotos/\e[0m\e[K
+!\e[36m❯\e[0m \e[2m╰── \e[0m\e[1m\e[34m2024/\e[0m\e[K
+!  \e[2m    ├── \e[0ma.jpg  \e[2m2.1 MB\e[0m\e[K
+!  \e[2m    ╰── \e[0mb.jpg  \e[2m1.8 MB\e[0m\e[K
+!  \e[34mNotes/\e[0m\e[K
+!  readme  \e[2m1 KB\e[0m\e[K
+!\e[J\e[6A  \e[34mPhotos/\e[0m\e[K
+!  \e[2m╰── \e[0m\e[34m2024/\e[0m\e[K
+!\e[36m❯\e[0m \e[2m    ├── \e[0m\e[1ma.jpg\e[0m  \e[2m2.1 MB\e[0m\e[K
+!  \e[2m    ╰── \e[0mb.jpg  \e[2m1.8 MB\e[0m\e[K
+!  \e[34mNotes/\e[0m\e[K
+!  readme  \e[2m1 KB\e[0m\e[K
+!\e[J\e[7A\e[J\e[32m✓\e[0m Restore \e[2m›\e[0m Photos/2024/a.jpg
+
+[rich] keys: browse a list, left at the top does nothing
+% CLI_INTERACTIVE=1
+% NO_COLOR=1
+$ browse -l Restore a/b a/c d
+< hlhhj
+|d
+!? Restore  ↑/↓ move, → open, ← close, enter select
+!❯ a/\e[K
+!  d\e[K
+!\e[J\e[2A❯ a/\e[K
+!  d\e[K
+!\e[J\e[2A❯ a/\e[K
+!  ├── b\e[K
+!  ╰── c\e[K
+!  d\e[K
+!\e[J\e[4A❯ a/\e[K
+!  d\e[K
+!\e[J\e[2A❯ a/\e[K
+!  d\e[K
+!\e[J\e[2A  a/\e[K
+!❯ d\e[K
+!\e[J\e[3A\e[J✓ Restore › d
+
+[rich] keys: browse a list, a directory
+% CLI_INTERACTIVE=1
+% NO_COLOR=1
+$ browse -l -d Restore a/b/c a/d e/ f
+< lj\e[B
+|e
+!? Restore  ↑/↓ move, → open, ← close, enter select
+!❯ a/\e[K
+!  e/\e[K
+!\e[J\e[2A❯ a/\e[K
+!  ╰── b/\e[K
+!  e/\e[K
+!\e[J\e[3A  a/\e[K
+!❯ ╰── b/\e[K
+!  e/\e[K
+!\e[J\e[3A  a/\e[K
+!  ╰── b/\e[K
+!❯ e/\e[K
+!\e[J\e[4A\e[J✓ Restore › e
+
+[rich] keys: browse a list, notes that do not fit are left out
+% CLI_INTERACTIVE=1
+% NO_COLOR=1
+% COLUMNS=20
+$ browse -l Restore "a/b | a long note" "a/c | short" "a/a-very-long-name-indeed | 1"
+< ljj
+|a/c
+!? Restore  ↑/↓ move, → open, ← close, enter select
+!❯ a/\e[K
+!\e[J\e[1A❯ a/\e[K
+!  ├── b\e[K
+!  ├── c  short\e[K
+!  ╰── a-very-long-n\e[K
+!\e[J\e[4A  a/\e[K
+!❯ ├── b\e[K
+!  ├── c  short\e[K
+!  ╰── a-very-long-n\e[K
+!\e[J\e[4A  a/\e[K
+!  ├── b\e[K
+!❯ ├── c  short\e[K
+!  ╰── a-very-long-n\e[K
+!\e[J\e[5A\e[J✓ Restore › a/c
+
+[rich] keys: browse a list, another separator
+% CLI_INTERACTIVE=1
+% NO_COLOR=1
+$ browse -l -s , Restore "a/b, 1" "c, 2"
+< j
+|c
+!? Restore  ↑/↓ move, → open, ← close, enter select
+!❯ a/\e[K
+!  c  2\e[K
+!\e[J\e[2A  a/\e[K
+!❯ c  2\e[K
+!\e[J\e[3A\e[J✓ Restore › c
+
+[rich] keys: browse a list, nothing in it
+% CLI_INTERACTIVE=1
+$ browse -l Restore
+!\e[31m✗\e[0m Restore: nothing to choose from
+= 2
+
+[rich] keys: browse a list, no directory in it
+% CLI_INTERACTIVE=1
+$ browse -l -d Restore a b
+!\e[31m✗\e[0m Restore: nothing to choose from
+= 2
+
+[plain] browse reads a path
+$ browse Open files
+< files/src/main.rs
+|files/src/main.rs
+!Open (a file under files): files/src/main.rs
+
+[plain] browse: a path under the directory
+$ browse Open files
+< src/main.rs
+|files/src/main.rs
+!Open (a file under files): src/main.rs
+
+[agent] browse reads a path
+$ browse Open files
+< files/src/main.rs
+|files/src/main.rs
+!Open: files/src/main.rs
+
+[agent] browse: a path under the directory
+$ browse Open ./files
+< src/main.rs
+|files/src/main.rs
+!Open: files/src/main.rs
+
+[plain] browse: a directory where a file is wanted
+$ browse Open files
+< docs
+!Open (a file under files): docs
+![ERROR] invalid choice 'docs' for: Open (a file under files)
+= 1
+
+[agent] browse: no such file
+$ browse Open files
+< nothing.txt
+!error: invalid choice 'nothing.txt' for: Open (a file under files)
+= 1
+
+[plain] browse: a directory is wanted
+$ browse -d Where files
+< docs/img
+|files/docs/img
+!Where (a directory under files): docs/img
+
+[agent] browse: a file where a directory is wanted
+$ browse -d Where files
+< README.md
+!error: invalid choice 'README.md' for: Where (a directory under files)
+= 1
+
+[plain] browse: no input
+$ browse Open files
+!Open (a file under files):\s
+![ERROR] input required: Open (a file under files). Pipe the path on stdin.
+= 1
+
+[agent] browse: no input
+$ browse -d Where files
+!error: input required: Where (a directory under files). Pipe the path on stdin.
+= 1
+
+[plain] browse: an empty line
+$ browse Open files
+<
+!Open (a file under files):\s
+![ERROR] input required: Open (a file under files). Pipe the path on stdin.
+= 1
+
+[plain] browse: not a directory
+$ browse Open nowhere
+![ERROR] Open: not a directory: nowhere
+= 2
+
+[plain] browse a list reads a path
+$ browse -l Restore a/b a/c d
+< a/c
+|a/c
+!Restore (a file): a/c
+
+[agent] browse a list reads a path
+$ browse -l Restore a/b a/c d
+< d
+|d
+!Restore: d
+
+[agent] browse a list: not in it
+$ browse -l Restore a/b a/c d
+< a
+!error: invalid choice 'a' for: Restore (a file: a/b | a/c | d)
+= 1
+
+[plain] browse a list: a directory, with or without its slash
+$ browse -l -d Restore a/b/c e/
+$ browse -l -d Restore a/b/c e/
+< a/b/
+< e
+|a/b
+|e
+!Restore (a directory): a/b/
+!Restore (a directory): e
+
+[agent] browse a list: no input
+$ browse -l Restore a/b "c | note"
+!error: input required: Restore (a file: a/b | c). Pipe the path on stdin.
+= 1
+
+[plain] browse a list: nothing in it
+$ browse -l Restore
+![ERROR] Restore: nothing to choose from
+= 2
+
+[plain] tasks: one after the other
+$ tasks Backup "Scan | 1" "Photos | 8" "Verify | 1"
+$ task Scan
+$ task_done Scan
+$ task Photos 5 10
+$ task Photos 10 10
+$ task Verify 2 2
+$ tasks_done
+![OK] Scan (<T>)
+!Backup: 50% (1/3)
+![OK] Photos (<T>)
+!Backup: 90% (2/3)
+![OK] Verify (<T>)
+![OK] Backup (3/3, <T>)
+
+[agent] tasks: one after the other
+$ tasks Backup "Scan | 1" "Photos | 8" "Verify | 1"
+$ task Scan
+$ task_done Scan
+$ task Photos 5 10
+$ task Photos 10 10
+$ task Verify 2 2
+$ tasks_done
+!Backup: 3/3 <T>
+
+[rich] tasks: one after the other
+$ tasks Backup "Scan | 1" "Photos | 8" "Verify | 1"
+$ task Scan
+$ task_done Scan
+$ task Photos 5 10
+$ task Photos 10 10
+$ task Verify 2 2
+$ tasks_done
+!\e[36m⠋\e[0m Scan    \e[2m<T>\e[0m\e[K
+!\e[2m· Photos\e[0m\e[K
+!\e[2m· Verify\e[0m\e[K
+!  \e[1mBackup\e[0m  \e[32m\e[0m\e[2m░░░░░░░░░░░░░░░░░░░░░░░░\e[0m   0%  \e[2m0/3 <T>\e[0m\e[K
+!\e[J\e[4A\e[32m✓\e[0m Scan    \e[2m<T>\e[0m\e[K
+!\e[2m· Photos\e[0m\e[K
+!\e[2m· Verify\e[0m\e[K
+!  \e[1mBackup\e[0m  \e[32m██\e[0m\e[2m░░░░░░░░░░░░░░░░░░░░░░\e[0m  10%  \e[2m1/3 <T>\e[0m\e[K
+!\e[J\e[4A\e[32m✓\e[0m Scan    \e[2m<T>\e[0m\e[K
+!\e[36m⠹\e[0m Photos  \e[32m████████████\e[0m\e[2m░░░░░░░░░░░░\e[0m  50%  \e[2m5/10\e[0m\e[K
+!\e[2m· Verify\e[0m\e[K
+!  \e[1mBackup\e[0m  \e[32m████████████\e[0m\e[2m░░░░░░░░░░░░\e[0m  50%  \e[2m1/3 <T>\e[0m\e[K
+!\e[J\e[4A\e[32m✓\e[0m Scan    \e[2m<T>\e[0m\e[K
+!\e[32m✓\e[0m Photos  \e[2m<T>\e[0m\e[K
+!\e[2m· Verify\e[0m\e[K
+!  \e[1mBackup\e[0m  \e[32m█████████████████████\e[0m\e[2m░░░\e[0m  90%  \e[2m2/3 <T>\e[0m\e[K
+!\e[J\e[4A\e[32m✓\e[0m Scan    \e[2m<T>\e[0m\e[K
+!\e[32m✓\e[0m Photos  \e[2m<T>\e[0m\e[K
+!\e[32m✓\e[0m Verify  \e[2m<T>\e[0m\e[K
+!  \e[1mBackup\e[0m  \e[32m████████████████████████\e[0m\e[2m\e[0m 100%  \e[2m3/3 <T>\e[0m\e[K
+!\e[J\e[4A\e[32m✓\e[0m Scan    \e[2m<T>\e[0m\e[K
+!\e[32m✓\e[0m Photos  \e[2m<T>\e[0m\e[K
+!\e[32m✓\e[0m Verify  \e[2m<T>\e[0m\e[K
+!\e[J\e[32m✓\e[0m Backup (3/3, <T>)
+
+[rich] tasks: side by side
+% NO_COLOR=1
+$ tasks Backup iPhone iPad Watch
+$ task iPhone 1 4
+$ task iPad 10 200
+$ task Watch 1 2
+$ task iPhone 3 4
+$ task Watch 2 2
+$ task iPad 200 200
+$ task iPhone 4 4
+$ tasks_done
+!⠋ iPhone  ██████░░░░░░░░░░░░░░░░░░  25%  1/4\e[K
+!· iPad\e[K
+!· Watch\e[K
+!  Backup  ██░░░░░░░░░░░░░░░░░░░░░░   8%  0/3 <T>\e[K
+!\e[J\e[4A⠙ iPhone  ██████░░░░░░░░░░░░░░░░░░  25%  1/4\e[K
+!⠙ iPad    █░░░░░░░░░░░░░░░░░░░░░░░   5%  10/200\e[K
+!· Watch\e[K
+!  Backup  ██░░░░░░░░░░░░░░░░░░░░░░  10%  0/3 <T>\e[K
+!\e[J\e[4A⠹ iPhone  ██████░░░░░░░░░░░░░░░░░░  25%  1/4\e[K
+!⠹ iPad    █░░░░░░░░░░░░░░░░░░░░░░░   5%  10/200\e[K
+!⠹ Watch   ████████████░░░░░░░░░░░░  50%  1/2\e[K
+!  Backup  ██████░░░░░░░░░░░░░░░░░░  26%  0/3 <T>\e[K
+!\e[J\e[4A⠸ iPhone  ██████████████████░░░░░░  75%  3/4\e[K
+!⠸ iPad    █░░░░░░░░░░░░░░░░░░░░░░░   5%  10/200\e[K
+!⠸ Watch   ████████████░░░░░░░░░░░░  50%  1/2\e[K
+!  Backup  ██████████░░░░░░░░░░░░░░  43%  0/3 <T>\e[K
+!\e[J\e[4A⠼ iPhone  ██████████████████░░░░░░  75%  3/4\e[K
+!⠼ iPad    █░░░░░░░░░░░░░░░░░░░░░░░   5%  10/200\e[K
+!✓ Watch   <T>\e[K
+!  Backup  ██████████████░░░░░░░░░░  60%  1/3 <T>\e[K
+!\e[J\e[4A⠴ iPhone  ██████████████████░░░░░░  75%  3/4\e[K
+!✓ iPad    <T>\e[K
+!✓ Watch   <T>\e[K
+!  Backup  ██████████████████████░░  91%  2/3 <T>\e[K
+!\e[J\e[4A✓ iPhone  <T>\e[K
+!✓ iPad    <T>\e[K
+!✓ Watch   <T>\e[K
+!  Backup  ████████████████████████ 100%  3/3 <T>\e[K
+!\e[J\e[4A✓ iPhone  <T>\e[K
+!✓ iPad    <T>\e[K
+!✓ Watch   <T>\e[K
+!\e[J✓ Backup (3/3, <T>)
+
+[plain] tasks: side by side
+$ tasks Backup iPhone iPad Watch
+$ task iPhone 1 4
+$ task iPad 10 200
+$ task Watch 1 2
+$ task iPhone 3 4
+$ task Watch 2 2
+$ task iPad 200 200
+$ task iPhone 4 4
+$ tasks_done
+!Backup: 26% (0/3)
+![OK] Watch (<T>)
+!Backup: 60% (1/3)
+![OK] iPad (<T>)
+!Backup: 91% (2/3)
+![OK] iPhone (<T>)
+![OK] Backup (3/3, <T>)
+
+[plain] tasks: one fails
+$ tasks Backup Scan Photos
+$ task_done Scan
+$ task Photos 1 4
+$ task_fail Photos "disk full"
+$ tasks_done
+![OK] Scan (<T>)
+!Backup: 50% (1/2)
+![ERROR] Photos: disk full
+![ERROR] Backup (1/2, <T>)
+= 1
+
+[agent] tasks: one fails
+$ tasks Backup Scan Photos
+$ task_done Scan
+$ task Photos 1 4
+$ task_fail Photos "disk full"
+$ tasks_done
+!error: Photos: disk full
+!Backup: 1/2 <T>
+= 1
+
+[rich] tasks: one fails
+$ tasks Backup Scan Photos
+$ task_done Scan
+$ task Photos 1 4
+$ task_fail Photos "disk full"
+$ tasks_done
+!\e[32m✓\e[0m Scan    \e[2m<T>\e[0m\e[K
+!\e[2m· Photos\e[0m\e[K
+!  \e[1mBackup\e[0m  \e[32m████████████\e[0m\e[2m░░░░░░░░░░░░\e[0m  50%  \e[2m1/2 <T>\e[0m\e[K
+!\e[J\e[3A\e[32m✓\e[0m Scan    \e[2m<T>\e[0m\e[K
+!\e[36m⠙\e[0m Photos  \e[32m██████\e[0m\e[2m░░░░░░░░░░░░░░░░░░\e[0m  25%  \e[2m1/4\e[0m\e[K
+!  \e[1mBackup\e[0m  \e[32m███████████████\e[0m\e[2m░░░░░░░░░\e[0m  62%  \e[2m1/2 <T>\e[0m\e[K
+!\e[J\e[3A\e[32m✓\e[0m Scan    \e[2m<T>\e[0m\e[K
+!\e[31m✗\e[0m Photos  \e[2mdisk full\e[0m\e[K
+!  \e[1mBackup\e[0m  \e[32m███████████████\e[0m\e[2m░░░░░░░░░\e[0m  62%  \e[2m1/2 <T>\e[0m\e[K
+!\e[J\e[3A\e[32m✓\e[0m Scan    \e[2m<T>\e[0m\e[K
+!\e[31m✗\e[0m Photos  \e[2mdisk full\e[0m\e[K
+!\e[J\e[31m✗\e[0m Backup (1/2, <T>)
+= 1
+
+[rich] tasks: a failure without a reason
+% NO_COLOR=1
+$ tasks Backup Scan
+$ task_fail Scan
+$ tasks_done
+!✗ Scan    failed\e[K
+!  Backup  ░░░░░░░░░░░░░░░░░░░░░░░░   0%  0/1 <T>\e[K
+!\e[J\e[2A✗ Scan    failed\e[K
+!\e[J✗ Backup (0/1, <T>)
+= 1
+
+[plain] tasks: a failure without a reason
+$ tasks Backup Scan
+$ task_fail Scan
+$ tasks_done
+![ERROR] Scan failed
+![ERROR] Backup (0/1, <T>)
+= 1
+
+[agent] tasks: a failure without a reason
+$ tasks Backup Scan
+$ task_fail Scan
+$ tasks_done
+!error: Scan failed
+!Backup: 0/1 <T>
+= 1
+
+[rich] tasks: ended before all were done
+% NO_COLOR=1
+$ tasks Backup Scan Photos Verify
+$ task_done Scan
+$ task Photos 1 4
+$ tasks_done
+!✓ Scan    <T>\e[K
+!· Photos\e[K
+!· Verify\e[K
+!  Backup  ████████░░░░░░░░░░░░░░░░  33%  1/3 <T>\e[K
+!\e[J\e[4A✓ Scan    <T>\e[K
+!⠙ Photos  ██████░░░░░░░░░░░░░░░░░░  25%  1/4\e[K
+!· Verify\e[K
+!  Backup  ██████████░░░░░░░░░░░░░░  41%  1/3 <T>\e[K
+!\e[J\e[4A✓ Scan    <T>\e[K
+!· Photos  ██████░░░░░░░░░░░░░░░░░░  25%  1/4\e[K
+!· Verify\e[K
+!\e[J● Backup (1/3, <T>)
+
+[plain] tasks: ended before all were done
+$ tasks Backup Scan Photos Verify
+$ task_done Scan
+$ task Photos 1 4
+$ tasks_done
+![OK] Scan (<T>)
+!Backup: 33% (1/3)
+![INFO] Backup (1/3, <T>)
+
+[agent] tasks: ended before all were done
+$ tasks Backup Scan Photos Verify
+$ task_done Scan
+$ task Photos 1 4
+$ tasks_done
+!Backup: 1/3 <T>
+
+[rich] tasks: weights
+% NO_COLOR=1
+$ tasks Job "small | 1" "big | 9" "none | 0"
+$ task_done small
+$ task big 1 3
+$ task_done none
+$ task_done big
+$ tasks_done
+!✓ small  <T>\e[K
+!· big\e[K
+!· none\e[K
+!  Job    ██░░░░░░░░░░░░░░░░░░░░░░  10%  1/3 <T>\e[K
+!\e[J\e[4A✓ small  <T>\e[K
+!⠙ big    ████████░░░░░░░░░░░░░░░░  33%  1/3\e[K
+!· none\e[K
+!  Job    █████████░░░░░░░░░░░░░░░  39%  1/3 <T>\e[K
+!\e[J\e[4A✓ small  <T>\e[K
+!⠹ big    ████████░░░░░░░░░░░░░░░░  33%  1/3\e[K
+!✓ none   <T>\e[K
+!  Job    █████████░░░░░░░░░░░░░░░  39%  2/3 <T>\e[K
+!\e[J\e[4A✓ small  <T>\e[K
+!✓ big    <T>\e[K
+!✓ none   <T>\e[K
+!  Job    ████████████████████████ 100%  3/3 <T>\e[K
+!\e[J\e[4A✓ small  <T>\e[K
+!✓ big    <T>\e[K
+!✓ none   <T>\e[K
+!\e[J✓ Job (3/3, <T>)
+
+[plain] tasks: weights
+$ tasks Job "small | 1" "big | 9"
+$ task big 1 3
+$ task big 2 3
+$ task big 3 3
+$ task_done small
+$ tasks_done
+!Job: 29% (0/2)
+!Job: 59% (0/2)
+![OK] big (<T>)
+!Job: 90% (1/2)
+![OK] small (<T>)
+![OK] Job (2/2, <T>)
+
+[rich] tasks: a name not seen before joins
+% NO_COLOR=1
+$ tasks Job a
+$ task a 1 2
+$ task late 1 2
+$ task_done a
+$ task_done late
+$ tasks_done
+!⠋ a    ████████████░░░░░░░░░░░░  50%  1/2\e[K
+!  Job  ████████████░░░░░░░░░░░░  50%  0/1 <T>\e[K
+!\e[J\e[2A⠙ a     ████████████░░░░░░░░░░░░  50%  1/2\e[K
+!⠙ late  ████████████░░░░░░░░░░░░  50%  1/2\e[K
+!  Job   ████████████░░░░░░░░░░░░  50%  0/2 <T>\e[K
+!\e[J\e[3A✓ a     <T>\e[K
+!⠹ late  ████████████░░░░░░░░░░░░  50%  1/2\e[K
+!  Job   ██████████████████░░░░░░  75%  1/2 <T>\e[K
+!\e[J\e[3A✓ a     <T>\e[K
+!✓ late  <T>\e[K
+!  Job   ████████████████████████ 100%  2/2 <T>\e[K
+!\e[J\e[3A✓ a     <T>\e[K
+!✓ late  <T>\e[K
+!\e[J✓ Job (2/2, <T>)
+
+[rich] tasks: without naming a group
+% NO_COLOR=1
+$ task alone 1 2
+$ task alone 2 2
+$ tasks_done
+!⠋ alone  ████████████░░░░░░░░░░░░  50%  1/2\e[K
+!  Total  ████████████░░░░░░░░░░░░  50%  0/1 <T>\e[K
+!\e[J\e[2A✓ alone  <T>\e[K
+!  Total  ████████████████████████ 100%  1/1 <T>\e[K
+!\e[J\e[2A✓ alone  <T>\e[K
+!\e[J✓ Total (1/1, <T>)
+
+[agent] tasks: without naming a group
+$ task alone 1 2
+$ task_done alone
+$ tasks_done
+!Total: 1/1 <T>
+
+[plain] tasks: ending without a group does nothing
+$ tasks_done
+
+[rich] tasks: a task past its total is done, and done once
+% NO_COLOR=1
+$ tasks Job a
+$ task a 9 4
+$ task_done a
+$ task_fail a "too late"
+$ tasks_done
+!✓ a    <T>\e[K
+!  Job  ████████████████████████ 100%  1/1 <T>\e[K
+!\e[J\e[2A✓ a    <T>\e[K
+!\e[J✓ Job (1/1, <T>)
+
+[plain] tasks: what has ended stays ended
+$ tasks Job a b
+$ task a 2 2
+$ task a 2 2
+$ task a 1 2
+$ task_fail b why
+$ task b 1 2
+$ task_done b
+$ tasks_done
+![OK] a (<T>)
+!Job: 50% (1/2)
+![ERROR] b: why
+![ERROR] Job (1/2, <T>)
+= 1
+
+[rich] tasks: a task that is not counted
+% NO_COLOR=1
+$ tasks Job a b
+$ task a
+$ task b
+$ task_done b
+$ task_done a
+$ tasks_done
+!⠋ a    <T>\e[K
+!· b\e[K
+!  Job  ░░░░░░░░░░░░░░░░░░░░░░░░   0%  0/2 <T>\e[K
+!\e[J\e[3A⠙ a    <T>\e[K
+!⠙ b    <T>\e[K
+!  Job  ░░░░░░░░░░░░░░░░░░░░░░░░   0%  0/2 <T>\e[K
+!\e[J\e[3A⠹ a    <T>\e[K
+!✓ b    <T>\e[K
+!  Job  ████████████░░░░░░░░░░░░  50%  1/2 <T>\e[K
+!\e[J\e[3A✓ a    <T>\e[K
+!✓ b    <T>\e[K
+!  Job  ████████████████████████ 100%  2/2 <T>\e[K
+!\e[J\e[3A✓ a    <T>\e[K
+!✓ b    <T>\e[K
+!\e[J✓ Job (2/2, <T>)
+
+[rich] tasks: more than a page
+% NO_COLOR=1
+% CLI_PAGE=3
+$ tasks Files a b c d e
+$ task a 1 2
+$ task b 1 2
+$ task_done a
+$ task_fail c "no room"
+$ task d 1 4
+$ task_done b
+$ tasks_done
+!⠋ a      ████████████░░░░░░░░░░░░  50%  1/2\e[K
+!  0 done, 4 waiting\e[K
+!  Files  ██░░░░░░░░░░░░░░░░░░░░░░  10%  0/5 <T>\e[K
+!\e[J\e[3A⠙ a      ████████████░░░░░░░░░░░░  50%  1/2\e[K
+!⠙ b      ████████████░░░░░░░░░░░░  50%  1/2\e[K
+!  0 done, 3 waiting\e[K
+!  Files  ████░░░░░░░░░░░░░░░░░░░░  20%  0/5 <T>\e[K
+!\e[J\e[4A⠹ b      ████████████░░░░░░░░░░░░  50%  1/2\e[K
+!  1 done, 3 waiting\e[K
+!  Files  ███████░░░░░░░░░░░░░░░░░  30%  1/5 <T>\e[K
+!\e[J\e[3A⠸ b      ████████████░░░░░░░░░░░░  50%  1/2\e[K
+!✗ c      no room\e[K
+!  1 done, 2 waiting\e[K
+!  Files  ███████░░░░░░░░░░░░░░░░░  30%  1/5 <T>\e[K
+!\e[J\e[4A⠼ b      ████████████░░░░░░░░░░░░  50%  1/2\e[K
+!✗ c      no room\e[K
+!⠼ d      ██████░░░░░░░░░░░░░░░░░░  25%  1/4\e[K
+!  1 done, 1 waiting\e[K
+!  Files  ████████░░░░░░░░░░░░░░░░  35%  1/5 <T>\e[K
+!\e[J\e[5A✗ c      no room\e[K
+!⠴ d      ██████░░░░░░░░░░░░░░░░░░  25%  1/4\e[K
+!  2 done, 1 waiting\e[K
+!  Files  ██████████░░░░░░░░░░░░░░  45%  2/5 <T>\e[K
+!\e[J\e[4A✗ c      no room\e[K
+!· d      ██████░░░░░░░░░░░░░░░░░░  25%  1/4\e[K
+!\e[J✗ Files (2/5, <T>)
+= 1
+
+[rich] tasks: a narrow terminal
+% NO_COLOR=1
+% COLUMNS=44
+$ tasks "A title that is rather long" "A task with a very long name" b
+$ task b 1 100000
+$ task "A task with a very long name" 5 9
+$ task_done b
+$ tasks_done
+!· A task with a…\e[K
+!⠋ b               ░░░░░   0%  1/100000\e[K
+!  A title that …  ░░░░░   0%  0/2 <T>\e[K
+!\e[J\e[3A⠙ A task with a…  ██░░░  55%  5/9\e[K
+!⠙ b               ░░░░░   0%  1/100000\e[K
+!  A title that …  █░░░░  27%  0/2 <T>\e[K
+!\e[J\e[3A⠹ A task with a…  ██░░░  55%  5/9\e[K
+!✓ b               <T>\e[K
+!  A title that …  ███░░  77%  1/2 <T>\e[K
+!\e[J\e[3A· A task with a…  ██░░░  55%  5/9\e[K
+!✓ b               <T>\e[K
+!\e[J● A title that is rather long (1/2, <T>)
+
+[plain] tasks: another separator
+$ tasks -s , Job "a, 3" "b, 1"
+$ task_done a
+$ task_done b
+$ tasks_done
+![OK] a (<T>)
+!Job: 75% (1/2)
+![OK] b (<T>)
+![OK] Job (2/2, <T>)
+
+[plain] tasks: a new group ends the one before
+$ tasks First a
+$ task a 1 2
+$ tasks Second b
+$ task_done b
+$ tasks_done
+!First: 50% (0/1)
+![INFO] First (0/1, <T>)
+![OK] b (<T>)
+![OK] Second (1/1, <T>)
+
+[rich] tasks: ASCII
+% NO_COLOR=1
+% LANG=C
+$ tasks Backup Scan Photos
+$ task_done Scan
+$ task Photos 1 2
+$ task_fail Photos
+$ tasks_done
+!+ Scan    <T>\e[K
+!. Photos\e[K
+!  Backup  ############------------  50%  1/2 <T>\e[K
+!\e[J\e[3A+ Scan    <T>\e[K
+!/ Photos  ############------------  50%  1/2\e[K
+!  Backup  ##################------  75%  1/2 <T>\e[K
+!\e[J\e[3A+ Scan    <T>\e[K
+!x Photos  failed\e[K
+!  Backup  ##################------  75%  1/2 <T>\e[K
+!\e[J\e[3A+ Scan    <T>\e[K
+!x Photos  failed\e[K
+!\e[Jx Backup (1/2, <T>)
+= 1
