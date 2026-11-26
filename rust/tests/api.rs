@@ -158,6 +158,24 @@ fn tables_measure_what_a_terminal_shows() {
 }
 
 #[test]
+fn each_stream_has_its_own_mode() {
+    let run =
+        Session::new(Mode::Plain).env("CLI_MODE_STDERR", "rich").env("NO_COLOR", "1").env("LANG", "en_US.UTF-8").run(
+            || {
+                assert_eq!((clikit::mode(), clikit::status_mode()), (Mode::Plain, Mode::Rich));
+                assert!(!clikit::unicode(), "what a program draws on standard output follows that stream");
+                clikit::ok("Built");
+                clikit::list(&["a"]);
+                clikit::tree(&[["x/y"]]);
+                clikit::set_mode(Mode::Agent);
+                assert_eq!((clikit::mode(), clikit::status_mode()), (Mode::Agent, Mode::Agent), "set_mode sets both");
+            },
+        );
+    assert_eq!(run.err, "✓ Built\n");
+    assert_eq!(run.out, "  - a\nx/\n`-- y\n");
+}
+
+#[test]
 fn tasks_on_threads() {
     let run = capture(Mode::Agent, || {
         let job = clikit::Tasks::new("Job");

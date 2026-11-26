@@ -8,6 +8,7 @@ Command-line output that adapts to whoever is reading it, for more than one lang
 |---|---|
 | a person at a terminal | colours, symbols, progress bars, spinners, timelines, trees, arrow-key menus, a file browser |
 | a pipe, a log file, CI | the same words without escape codes or animation |
+| both at once (`tool > file`) | plain content in the file, colours and live bars at the terminal |
 | an LLM agent | only what is needed, in as few tokens as possible |
 
 ```
@@ -64,7 +65,7 @@ Help pages, written from the commands and options a program declares:
 | Rust (1.75+) | [`rust/`](rust/README.md) | programs, with or without clap | a git dependency on this repository |
 
 Both print the same bytes for the same call. [`SPEC.md`](SPEC.md) is the contract, and
-[`conformance/cases.txt`](conformance/cases.txt) holds 426 cases that both test suites run.
+[`conformance/cases.txt`](conformance/cases.txt) holds 432 cases that both test suites run.
 
 ## Try it
 

@@ -17,16 +17,24 @@ Output is written for one of three readers.
 | `plain` | a pipe, a file, CI | the same words, no escape codes, no animation |
 | `agent` | an LLM | only what is needed, in as few tokens as possible |
 
-The mode is decided once, by the first rule that applies:
+The mode is decided once, and for each stream on its own: one mode for standard output (content)
+and one for standard error (status lines, progress, prompts). So in `tool > file` or
+`tool | grep x` the content is plain while a person at the terminal still gets coloured status
+lines, live bars and key-driven prompts. For each stream the first rule that applies decides:
 
+0. For standard error only: `CLI_MODE_STDERR` is `rich`, `plain` or `agent`: that mode.
 1. `CLI_MODE` is `rich`, `plain` or `agent`: that mode.
 2. `CLI_AGENT` is `1`, `true` or `yes`: `agent`.
 3. `CLI_AGENT` is not `0`, `false` or `no`, and one of `CLAUDECODE`, `CURSOR_AGENT`, `GEMINI_CLI`,
    `CODEX_SANDBOX`, `OPENCODE`, `AI_AGENT`, `AGENT` is set: `agent`.
 4. `TERM` is `dumb`: `plain`.
 5. `FORCE_COLOR` is set and not `0`: `rich`.
-6. Standard output and standard error are both terminals: `rich`.
+6. The stream is a terminal: `rich`.
 7. Otherwise: `plain`.
+
+`mode` prints the mode of standard output, `mode -e` that of standard error. Setting a mode
+(`cli_mode agent`, `set_mode`) sets both. A key-driven prompt needs standard error to be rich
+and standard input and standard error to be terminals.
 
 An environment variable that is set to the empty string counts as not set.
 

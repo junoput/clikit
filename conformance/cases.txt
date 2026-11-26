@@ -4211,3 +4211,113 @@ $ task_note Transfer "3.4 GB, 1,204 files"
 $ tasks_done
 ![OK] Transfer (5m <T>)
 ![OK] Backup (1/1, <T>)
+
+[plain] modes: standard error rich, standard output plain
+% CLI_MODE_STDERR=rich
+$ ok Built
+$ list a b
+$ warn Careful
+$ table "a | b" "1 | 2"
+$ hint "a tip"
+$ step Build
+$ kv key value
+$ exec true
+$ mode
+$ mode -e
+|  - a
+|  - b
+|  a  b
+|  -  -
+|  1  2
+|  key: value
+|plain
+|rich
+!\e[32m✓\e[0m Built
+!\e[33m▲\e[0m Careful
+!\e[2ma tip\e[0m
+!\e[1m\e[36m▸ \e[0m\e[1mBuild\e[0m
+!\e[2m$ true\e[0m
+
+[rich] modes: standard error plain, standard output rich
+% CLI_MODE_STDERR=plain
+$ ok Built
+$ list a b
+$ style red x
+$ step Build
+$ mode
+$ mode -e
+|  \e[36m•\e[0m a
+|  \e[36m•\e[0m b
+|\e[31mx\e[0m
+|rich
+|plain
+![OK] Built
+!==> Build
+
+[plain] modes: a progress bar at the terminal while the output goes to a file
+% CLI_MODE_STDERR=rich
+% NO_COLOR=1
+$ progress 1 2 copy
+$ list between
+$ progress 2 2 copy
+$ tasks Job a
+$ task a 1 2
+$ tasks_done
+|  - between
+!\r⠋ copy ████████████░░░░░░░░░░░░  50% 1/2 <T>\e[K\r⠙ copy ████████████████████████ 100% 2/2 <T>\e[K\r\e[K✓ copy (2/2, <T>)
+!⠋ a    ████████████░░░░░░░░░░░░  50%  1/2\e[K
+!  Job  ████████████░░░░░░░░░░░░  50%  0/1 <T>\e[K
+!\e[J\e[2A■ a    ████████████░░░░░░░░░░░░  50%  1/2\e[K
+!\e[J● Job (0/1, <T>)
+
+[plain] modes: a menu at the terminal, the answer into a pipe
+% CLI_MODE_STDERR=rich
+% CLI_INTERACTIVE=1
+% NO_COLOR=1
+$ select Fruit apple banana
+$ tree a/b
+$ browse -l Pick a/b c
+< j
+< l
+< j
+|banana
+|a/
+|`-- b
+|c
+!? Fruit  ↑/↓ move, enter select
+!❯ apple\e[K
+!  banana\e[K
+!\e[2A  apple\e[K
+!❯ banana\e[K
+!\e[3A\e[J✓ Fruit › banana
+!? Pick  ↑/↓ move, → open, ← close, enter select
+!❯ a/\e[K
+!  c\e[K
+!\e[J\e[2A❯ a/\e[K
+!  ╰── b\e[K
+!  c\e[K
+!\e[J\e[3A❯ a/\e[K
+!  c\e[K
+!\e[J\e[2A  a/\e[K
+!❯ c\e[K
+!\e[J\e[3A\e[J✓ Pick › c
+
+[agent] modes: an agent reads the output, a person watches the terminal
+% CLI_MODE_STDERR=rich
+% NO_COLOR=1
+$ info Starting
+$ header Title
+$ list a
+$ error Broke
+|# Title
+|- a
+!● Starting
+!✗ Broke
+
+[rich] modes: CLI_MODE_STDERR that is not a mode is ignored
+% CLI_MODE_STDERR=fancy
+% NO_COLOR=1
+$ ok Built
+$ mode -e
+|rich
+!✓ Built

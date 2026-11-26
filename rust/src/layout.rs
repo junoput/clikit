@@ -7,14 +7,14 @@ use crate::text::{len, pad, width};
 
 /// A blank line, for people only.
 pub fn nl() {
-    if ctx::theme().mode != Mode::Agent {
+    if ctx::theme_out().mode != Mode::Agent {
         ctx::out("\n");
     }
 }
 
 /// A section title.
 pub fn header(title: impl Display) {
-    let t = ctx::theme();
+    let t = ctx::theme_out();
     let title = title.to_string();
     let text = match t.mode {
         Mode::Agent => format!("# {title}\n"),
@@ -29,7 +29,7 @@ pub fn header(title: impl Display) {
 
 /// A horizontal rule, for people only.
 pub fn hr() {
-    let t = ctx::theme();
+    let t = ctx::theme_out();
     if t.mode == Mode::Agent {
         return;
     }
@@ -39,7 +39,7 @@ pub fn hr() {
 
 /// Plain text in a frame, with an optional title. Agents get the text without the frame.
 pub fn boxed<S: AsRef<str>>(title: Option<&str>, lines: &[S]) {
-    let t = ctx::theme();
+    let t = ctx::theme_out();
     let title = title.unwrap_or("");
     let mut text = String::new();
     if t.mode == Mode::Agent {
@@ -74,7 +74,7 @@ pub fn boxed<S: AsRef<str>>(title: Option<&str>, lines: &[S]) {
 }
 
 fn print_list<S: AsRef<str>>(items: &[S], numbered: bool) {
-    let t = ctx::theme();
+    let t = ctx::theme_out();
     let digits = items.len().to_string().len();
     let (cyan, reset) = (t.c(CYAN), t.c(RESET));
     let mut text = String::new();
@@ -103,7 +103,7 @@ pub fn list_numbered<S: AsRef<str>>(items: &[S]) {
 
 /// Aligned `key: value` lines.
 pub fn kv<K: AsRef<str>, V: AsRef<str>>(pairs: &[(K, V)]) {
-    let t = ctx::theme();
+    let t = ctx::theme_out();
     let w = pairs.iter().map(|(key, _)| width(key.as_ref())).max().unwrap_or(0);
     let mut text = String::new();
     for (key, value) in pairs {
@@ -176,7 +176,7 @@ impl Table {
     /// Print the rows. Cells are plain text; they are trimmed and aligned. At a terminal a
     /// table wider than the screen has its widest columns cut. Agents get tab-separated rows.
     pub fn print<R: AsRef<[C]>, C: AsRef<str>>(&self, rows: &[R]) {
-        let t = ctx::theme();
+        let t = ctx::theme_out();
         if rows.is_empty() {
             return;
         }
@@ -340,7 +340,7 @@ pub fn table<R: AsRef<[C]>, C: AsRef<str>>(rows: &[R]) {
 /// Styles are separated by spaces: `bold dim italic underline inverse`, a colour
 /// (`black red green yellow blue magenta cyan white gray`), or `bg-<colour>`.
 pub fn style(styles: &str, text: impl Display) -> String {
-    let t = ctx::theme();
+    let t = ctx::theme_out();
     if !t.color {
         return text.to_string();
     }

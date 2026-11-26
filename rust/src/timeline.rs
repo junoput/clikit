@@ -69,7 +69,7 @@ impl Timeline {
     /// Print the events. Cells are plain text; they are trimmed. Agents get the events in
     /// order as tab-separated rows, with `from: TRACK` where two tracks are linked.
     pub fn print<R: AsRef<[C]>, C: AsRef<str>>(&self, rows: &[R]) {
-        let t = ctx::theme();
+        let t = ctx::theme_out();
         let mut events: Vec<Event> = Vec::new();
         let (mut dates, mut numbers, mut midnight) = (0, 0, true);
         let (mut when_width, mut name_width) = (0, 0);

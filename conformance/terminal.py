@@ -112,6 +112,30 @@ def typed_in_secret(command):
     return asked, seen.count(b"hunter2")
 
 
+def screen(command):
+    """Run a shell command in a pseudo-terminal and return what reached the terminal."""
+    env = {name: os.environ[name] for name in ("PATH", "HOME", "TMPDIR") if name in os.environ}
+    env.update({"TERM": "xterm-256color", "LANG": "en_US.UTF-8", "CLI_AGENT": "0"})
+    pid, fd = pty.fork()
+    if pid == 0:
+        os.execvpe("/bin/sh", ["/bin/sh", "-c", command], env)
+    seen, end = b"", time.time() + 10
+    while time.time() < end:
+        if select.select([fd], [], [], 0.05)[0]:
+            try:
+                data = os.read(fd, 65536)
+            except OSError:
+                break
+            if not data:
+                break
+            seen += data
+    try:
+        os.waitpid(pid, 0)
+    except OSError:
+        pass
+    return seen
+
+
 def main():
     prompts = [  # what to run through cli.sh, and what to type before Ctrl-C
         (["select", "Pick", "a", "b", "c"], b"\x1b[B"),
@@ -157,7 +181,23 @@ def main():
             shown += 1
             print("FAIL %s: question %s, password on the screen %d times" % (name, "shown" if asked else "missing", times))
     print("%d passwords typed with the output piped, %d shown or asked without a question" % (len(secrets), shown))
-    sys.exit(1 if failed or shown else 0)
+
+    # Each stream on its own: with the output piped, a status line at the terminal is still
+    # rich (a green tick) and the content in the pipe is plain (an ASCII bullet).
+    split = [("%s: streams" % shell, '%s "%s" ok Built | cat; %s "%s" list item | cat' % (shell, CLI, shell, CLI))
+             for shell in sorted(set(shells))]
+    if os.path.exists(RUST_DEMO):
+        split.append(("rust: streams", 'DEMO_FAST=1 "%s" lists | cat' % RUST_DEMO))
+    wrong = 0
+    for name, command in split:
+        seen = screen(command)
+        tick, bullet = b"\x1b[32m\xe2\x9c\x93" in seen or name.startswith("rust"), b"  - " in seen
+        dimmed = b"\x1b[2m" in seen
+        if not (tick and bullet and (dimmed or not name.startswith("rust"))):
+            wrong += 1
+            print("FAIL %s: rich status %s, plain content %s" % (name, tick and dimmed, bullet))
+    print("%d runs with the output piped, %d without rich status lines or with coloured content" % (len(split), wrong))
+    sys.exit(1 if failed or shown or wrong else 0)
 
 
 if __name__ == "__main__":

@@ -210,7 +210,9 @@ impl Forest {
         everything: bool,
         rows: &mut Vec<Row>,
     ) {
-        let t = ctx::theme();
+        // A whole tree is content, on standard output; the open rows of a browser are drawn
+        // on standard error.
+        let t = if everything { ctx::theme_out() } else { ctx::theme() };
         let (mid, end, bar) = (t.g("├── ", "|-- "), t.g("╰── ", "`-- "), t.g("│   ", "|   "));
         let shown: Vec<usize> = among.iter().copied().filter(|&id| self.shown(id)).collect();
         for (at, &id) in shown.iter().enumerate() {
@@ -375,7 +377,7 @@ pub fn tree_dir(dir: impl AsRef<Path>) -> io::Result<()> {
 }
 
 fn draw(mut forest: Forest, max: usize) {
-    let t = ctx::theme();
+    let t = ctx::theme_out();
     let rows = forest.walk(max, true);
     let ellipsis = t.g("…", "...");
     let (dim, blue, reset) = (t.c(DIM), t.c(BLUE), t.c(RESET));

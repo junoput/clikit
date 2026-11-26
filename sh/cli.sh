@@ -18,6 +18,7 @@
 #
 # Environment:
 #   CLI_MODE=rich|plain|agent   force a mode          NO_COLOR=1     no colours
+#   CLI_MODE_STDERR=...         a mode for standard error alone
 #   CLI_AGENT=1|0               force / forbid agent  FORCE_COLOR=1  rich without a tty
 #   CLI_QUIET=1                 only warnings+errors  CLI_DEBUG=1    show cli_debug
 #   CLI_YES=1                   cli_confirm says yes  CLI_INTERACTIVE=0|1
@@ -35,6 +36,7 @@ _CLI_R='' _CLI_KEY=''
 _CLI_APP=${0##*/} _CLI_APP_DESC='' _CLI_APP_VER=''
 _CLI_CMDS='' _CLI_OPTS='' _CLI_SYN='' _CLI_EX='' _CLI_CUR=@app
 _CLI_STEP_I=0 _CLI_STEP_N=0 _CLI_P_T0=''
+_CLI_SPLIT='' _CLI_MODE_OUT=plain _CLI_MODE_ERR=plain
 _CLI_W='' _CLI_W_AT='' _CLI_LIVE_CLEAR='' _CLI_LIVE_TEXT='' _CLI_K_AT=0
 _CLI_K_T0='' _CLI_K_TITLE='' _CLI_K_N=0 _CLI_K_DRAWN=0 _CLI_K_FRAME=0 _CLI_K_Q=0 _CLI_K_DONE=0 _CLI_K_FAILED=0
 _CLI_HIST='' _CLI_HIST_N=0 _CLI_EDIT_LIST='' _CLI_STTY='' _CLI_TRAP='' _CLI_UNREAD=''
@@ -49,26 +51,68 @@ fi
 
 # ── modes, colours, symbols ──────────────────────────────────────────────────
 
-_cli_detect() {
-  case "${CLI_MODE:-}" in rich|plain|agent) _CLI_MODE=$CLI_MODE; return 0;; esac
-  _CLI_MODE=plain
+_cli_auto() {  # 1|2 → $_CLI_R   the mode for that stream, standard output or standard error
+  _CLI_R=plain
   case "${CLI_AGENT:-}" in
-    1|true|yes) _CLI_MODE=agent; return 0;;
+    1|true|yes) _CLI_R=agent; return 0;;
     0|false|no) ;;
     *) # environment variables set by common agent harnesses
        if [ -n "${CLAUDECODE:-}${CURSOR_AGENT:-}${GEMINI_CLI:-}${CODEX_SANDBOX:-}${OPENCODE:-}${AI_AGENT:-}${AGENT:-}" ]; then
-         _CLI_MODE=agent; return 0
+         _CLI_R=agent; return 0
        fi;;
   esac
   if [ "${TERM:-}" = dumb ]; then return 0; fi
-  if [ -n "${FORCE_COLOR:-}" ] && [ "${FORCE_COLOR:-}" != 0 ]; then _CLI_MODE=rich; return 0; fi
-  if [ -t 1 ] && [ -t 2 ]; then _CLI_MODE=rich; fi
+  if [ -n "${FORCE_COLOR:-}" ] && [ "${FORCE_COLOR:-}" != 0 ]; then _CLI_R=rich; return 0; fi
+  if [ -t "$1" ]; then _CLI_R=rich; fi
   return 0
 }
 
+# Each stream is judged on its own: with `tool > file` the content is plain and the status lines
+# at the terminal stay rich. $_CLI_MODE_OUT is for content, $_CLI_MODE_ERR for status lines,
+# progress and prompts.
+_cli_detect() {
+  case "${CLI_MODE:-}" in
+    rich|plain|agent) _CLI_MODE_OUT=$CLI_MODE _CLI_MODE_ERR=$CLI_MODE;;
+    *) _cli_auto 1; _CLI_MODE_OUT=$_CLI_R; _cli_auto 2; _CLI_MODE_ERR=$_CLI_R;;
+  esac
+  case "${CLI_MODE_STDERR:-}" in rich|plain|agent) _CLI_MODE_ERR=$CLI_MODE_STDERR;; esac
+}
+
 _cli_setup() {
-  local e=$'\033[' utf=0
   _cli_detect
+  _CLI_MODE=$_CLI_MODE_OUT
+  _cli_vars
+  if [ "$_CLI_MODE_OUT" != "$_CLI_MODE_ERR" ]; then _cli_split; fi
+}
+
+# The colours and symbols below are those of standard output. A function that writes to
+# standard error runs under _cli_err, which gives it its own set for as long as it runs.
+_cli_err() {  # FUNCTION [ARGS...]
+  if [ "$_CLI_MODE" = "$_CLI_MODE_ERR" ]; then "$@"; return; fi
+  local CLI_RESET CLI_BOLD CLI_DIM CLI_ITALIC CLI_UNDERLINE CLI_RED CLI_GREEN CLI_YELLOW CLI_BLUE CLI_MAGENTA CLI_CYAN CLI_WHITE CLI_GRAY
+  local _CLI_G_OK _CLI_G_ERR _CLI_G_WARN _CLI_G_INFO _CLI_G_DOT _CLI_G_STEP _CLI_G_BULLET _CLI_G_PTR _CLI_G_ON _CLI_G_OFF
+  local _CLI_G_FULL _CLI_G_EMPTY _CLI_G_H _CLI_G_V _CLI_G_TL _CLI_G_TR _CLI_G_BL _CLI_G_BR _CLI_G_SPIN _CLI_G_SEP _CLI_G_KEYS
+  local _CLI_G_ELL _CLI_G_TT _CLI_G_TB _CLI_G_TLEFT _CLI_G_TRIGHT _CLI_G_TX _CLI_G_NODE _CLI_G_MANY _CLI_G_STOP _CLI_G_SKIP
+  local _CLI_MODE=$_CLI_MODE_ERR
+  _cli_vars
+  "$@"
+}
+
+_cli_split() {  # the two streams differ: put every function that writes to standard error under _cli_err
+  local f
+  if [ -n "$_CLI_SPLIT" ]; then return 0; fi
+  _CLI_SPLIT=1
+  for f in _cli_msg cli_hint cli_step _cli_exec_show _cli_ps cli_countdown cli_progress cli_progress_done cli_spin \
+           _cli_tasks_draw _cli_task_end cli_tasks_done cli_confirm cli_input cli_password cli_pause \
+           _cli_pick _cli_pick_line _cli_edit cli_browse; do
+    if [ -n "${ZSH_VERSION:-}" ]; then eval "functions[_cli_e_$f]=\${functions[$f]}"
+    else eval "$(declare -f "$f" | sed "1s/^$f /_cli_e_$f /")"; fi
+    eval "$f() { _cli_err _cli_e_$f \"\$@\"; }"
+  done
+}
+
+_cli_vars() {  # the colours and symbols that go with $_CLI_MODE
+  local e=$'\033[' utf=0
   if [ "$_CLI_MODE" = rich ] && [ -z "${NO_COLOR:-}" ]; then
     CLI_RESET="${e}0m" CLI_BOLD="${e}1m" CLI_DIM="${e}2m" CLI_ITALIC="${e}3m" CLI_UNDERLINE="${e}4m"
     CLI_RED="${e}31m" CLI_GREEN="${e}32m" CLI_YELLOW="${e}33m" CLI_BLUE="${e}34m"
@@ -93,11 +137,12 @@ _cli_setup() {
   fi
 }
 
-cli_mode() {  # cli_mode [auto|rich|plain|agent]   print the mode, or set it
-  if [ $# -eq 0 ]; then printf '%s\n' "$_CLI_MODE"; return 0; fi
+cli_mode() {  # cli_mode [-e] [auto|rich|plain|agent]   print the mode (-e: the one of standard error), or set it
+  if [ "${1:-}" = -e ]; then printf '%s\n' "$_CLI_MODE_ERR"; return 0; fi
+  if [ $# -eq 0 ]; then printf '%s\n' "$_CLI_MODE_OUT"; return 0; fi
   case $1 in
     auto) CLI_MODE='';;
-    rich|plain|agent) CLI_MODE=$1;;
+    rich|plain|agent) CLI_MODE=$1 CLI_MODE_STDERR='';;
     *) cli_error "cli_mode: unknown mode '$1' (auto, rich, plain, agent)"; return 2;;
   esac
   export CLI_MODE
@@ -262,7 +307,7 @@ _cli_since() {  # START_MS → the time since then, formatted; whole seconds whe
 
 _cli_tty() {  # can we run a key-driven prompt?
   case "${CLI_INTERACTIVE:-}" in 0|false|no) return 1;; 1|true|yes) return 0;; esac
-  [ "$_CLI_MODE" = rich ] && [ -t 0 ] && [ -t 2 ]
+  [ "$_CLI_MODE_ERR" = rich ] && [ -t 0 ] && [ -t 2 ]
 }
 
 # ── messages (stderr) ────────────────────────────────────────────────────────
@@ -333,8 +378,10 @@ cli_step() {  # cli_step TEXT   "[2/5] TEXT" after cli_steps 5, otherwise "▸ T
   esac >&2
 }
 
+_cli_exec_show() { printf '%s$ %s%s\n' "$CLI_DIM" "$*" "$CLI_RESET" >&2; }
+
 cli_exec() {  # cli_exec COMMAND [ARGS...]   show the command, then run it
-  if [ -z "${CLI_QUIET:-}" ]; then printf '%s$ %s%s\n' "$CLI_DIM" "$*" "$CLI_RESET" >&2; fi
+  if [ -z "${CLI_QUIET:-}" ]; then _cli_exec_show "$@"; fi
   "$@"
 }
 
@@ -2591,10 +2638,12 @@ cli_run() {  # cli_run "$@"   parse the command line and run the matching comman
   _cli_dispatch "$1" ${pre[@]+"${pre[@]}"} "${@:2}"
 }
 
+_cli_ps() { _CLI_R="$CLI_CYAN$_CLI_APP$CLI_RESET> "; }  # the prompt of cli_interactive
+
 cli_interactive() {  # cli_interactive   a prompt that runs the app's commands until "exit"
   # Tab and Shift-Tab step through the commands, and after a command through its options.
   local line='' words='' w='' rc=0 ps='' name fn desc width=0
-  ps="$CLI_CYAN$_CLI_APP$CLI_RESET> "
+  _cli_ps; ps=$_CLI_R
   if _cli_tty; then
     cli_hint "$_CLI_APP interactive: type a command, 'help' or 'exit'. Tab completes, an empty line opens a menu."
   fi

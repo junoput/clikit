@@ -74,7 +74,10 @@ CLI_AGENT=1    examples/demo.sh all    # what an LLM gets
 | `plain` | pipes, files, CI, `TERM=dumb` | the same words, no escape codes, no animation |
 | `agent` | `CLI_AGENT=1`, `--agent`, or an agent harness is detected | only what is needed |
 
-The mode is chosen once, when the file is sourced. `cli_mode` prints it; `cli_mode agent` (or `rich`,
+The mode is chosen once, when the file is sourced, and for each stream on its own: with
+`./tool.sh > out.txt` the content in the file is plain, and the status lines, bars and menus at
+the terminal stay rich (`cli_mode` prints the mode of stdout, `cli_mode -e` that of stderr;
+`CLI_MODE_STDERR=plain` overrides stderr alone). `cli_mode` prints it; `cli_mode agent` (or `rich`,
 `plain`, `auto`) changes it and exports the choice to child scripts.
 
 Status lines (`cli_info`, `cli_ok`, progress, the prompt UI) go to stderr. Content (lists, tables,

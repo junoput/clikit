@@ -146,7 +146,10 @@ pub(crate) struct Live {
 /// A captured run: its own mode, environment, input and output.
 pub(crate) struct Scope {
     pub live: Option<Live>,
+    /// For standard error: status lines, progress, prompts.
     pub theme: Theme,
+    /// For standard output: content.
+    pub theme_out: Theme,
     pub env: HashMap<String, String>,
     pub out: String,
     pub err: String,
@@ -157,10 +160,12 @@ pub(crate) struct Scope {
 impl Scope {
     pub fn new(mode: Mode, env: HashMap<String, String>, input: &str) -> Scope {
         let lookup = |name: &str| env.get(name).filter(|v| !v.is_empty()).cloned();
-        let theme = Theme::detect(&lookup, false, Some(mode), None);
+        let theme_out = Theme::detect(&lookup, false, Some(mode), None);
+        let theme = Theme::detect(&lookup, false, Some(stderr_mode(&lookup).unwrap_or(mode)), None);
         Scope {
             live: None,
             theme,
+            theme_out,
             env,
             out: String::new(),
             err: String::new(),
@@ -192,7 +197,8 @@ struct Forced {
 }
 
 static FORCED: RwLock<Forced> = RwLock::new(Forced { mode: None, color: None });
-static THEME: RwLock<Option<Theme>> = RwLock::new(None);
+/// What was decided for standard output and for standard error.
+static THEME: RwLock<Option<(Theme, Theme)>> = RwLock::new(None);
 static STATE: Mutex<State> = Mutex::new(State { step_i: 0, step_n: 0 });
 static LIVE: Mutex<Option<Live>> = Mutex::new(None);
 /// The terminal's width and when it was asked for: asking means running `stty`.
@@ -216,33 +222,52 @@ pub(crate) fn flag(name: &str) -> bool {
     env(name).is_some()
 }
 
-pub(crate) fn theme() -> Theme {
-    if let Some(theme) = SCOPE.with(|s| s.borrow().as_ref().map(|scope| scope.theme)) {
-        return theme;
+/// `CLI_MODE_STDERR`: a mode for standard error alone.
+fn stderr_mode(env: &dyn Fn(&str) -> Option<String>) -> Option<Mode> {
+    env("CLI_MODE_STDERR").and_then(|mode| Mode::parse(&mode))
+}
+
+/// The themes of standard output and of standard error. Each stream is judged on its own: with
+/// `tool > file` the content is plain and the status lines at the terminal stay rich.
+fn themes() -> (Theme, Theme) {
+    if let Some(themes) = SCOPE.with(|s| s.borrow().as_ref().map(|scope| (scope.theme_out, scope.theme))) {
+        return themes;
     }
-    if let Some(theme) = *THEME.read().unwrap_or_else(|e| e.into_inner()) {
-        return theme;
+    if let Some(themes) = *THEME.read().unwrap_or_else(|e| e.into_inner()) {
+        return themes;
     }
     let forced = FORCED.read().unwrap_or_else(|e| e.into_inner());
-    let mut tty = io::stdout().is_terminal() && io::stderr().is_terminal();
-    if cfg!(windows) {
-        // Without a Windows API call we cannot switch the console to ANSI ourselves.
-        tty = tty && (real_env("WT_SESSION").is_some() || real_env("TERM").is_some());
-    }
-    let theme = Theme::detect(&real_env, tty, forced.mode, forced.color);
-    *THEME.write().unwrap_or_else(|e| e.into_inner()) = Some(theme);
-    theme
+    // Without a Windows API call we cannot switch the console to ANSI ourselves.
+    let ansi = !cfg!(windows) || real_env("WT_SESSION").is_some() || real_env("TERM").is_some();
+    let out = Theme::detect(&real_env, ansi && io::stdout().is_terminal(), forced.mode, forced.color);
+    let err_mode = forced.mode.or_else(|| stderr_mode(&real_env));
+    let err = Theme::detect(&real_env, ansi && io::stderr().is_terminal(), err_mode, forced.color);
+    *THEME.write().unwrap_or_else(|e| e.into_inner()) = Some((out, err));
+    (out, err)
+}
+
+/// The theme of standard error: status lines, progress, prompts.
+pub(crate) fn theme() -> Theme {
+    themes().1
+}
+
+/// The theme of standard output: content.
+pub(crate) fn theme_out() -> Theme {
+    themes().0
 }
 
 fn force(change: impl Fn(&mut Forced)) {
     let in_scope = SCOPE.with(|s| {
         let mut slot = s.borrow_mut();
         let Some(scope) = slot.as_mut() else { return false };
-        let mut forced = Forced { mode: Some(scope.theme.mode), color: None };
-        change(&mut forced);
         let env = &scope.env;
         let lookup = |name: &str| env.get(name).filter(|v| !v.is_empty()).cloned();
-        scope.theme = Theme::detect(&lookup, false, forced.mode, forced.color);
+        let apply = |theme: Theme| {
+            let mut forced = Forced { mode: Some(theme.mode), color: None };
+            change(&mut forced);
+            Theme::detect(&lookup, false, forced.mode, forced.color)
+        };
+        (scope.theme, scope.theme_out) = (apply(scope.theme), apply(scope.theme_out));
         true
     });
     if !in_scope {
@@ -251,26 +276,35 @@ fn force(change: impl Fn(&mut Forced)) {
     }
 }
 
-/// The mode in use.
+/// The mode in use, for standard output: what a program's own content should follow.
+///
+/// Each stream is judged on its own. With `tool > file` or `tool | grep x` this is
+/// [`Mode::Plain`] while [`status_mode`] stays [`Mode::Rich`] at the terminal. `CLI_MODE`,
+/// [`set_mode`] and agent detection set both.
 pub fn mode() -> Mode {
+    theme_out().mode
+}
+
+/// The mode of standard error: status lines, progress bars and prompts.
+pub fn status_mode() -> Mode {
     theme().mode
 }
 
 /// True when the output is being read by an LLM agent.
 pub fn is_agent() -> bool {
-    theme().mode == Mode::Agent
+    theme_out().mode == Mode::Agent
 }
 
 /// True when output is coloured: rich mode, and colours not turned off (`NO_COLOR`,
 /// `--no-color`, [`set_color`]). For a program that draws something of its own.
 pub fn color() -> bool {
-    theme().color
+    theme_out().color
 }
 
 /// True when Unicode symbols are used: rich mode with a UTF-8 locale. Otherwise the ASCII
 /// stand-ins are (`+` for `✓`, `#` for `█`).
 pub fn unicode() -> bool {
-    theme().utf
+    theme_out().utf
 }
 
 /// Force a mode for the rest of the run, whatever the environment says.
@@ -290,7 +324,7 @@ pub fn set_color(on: bool) {
 
 /// The mode and colour that were forced, to put back later with [`set_forced`].
 pub(crate) fn forced() -> (Option<Mode>, Option<bool>) {
-    if let Some(theme) = SCOPE.with(|s| s.borrow().as_ref().map(|scope| scope.theme)) {
+    if let Some(theme) = SCOPE.with(|s| s.borrow().as_ref().map(|scope| scope.theme_out)) {
         return (Some(theme.mode), Some(theme.color));
     }
     let forced = FORCED.read().unwrap_or_else(|e| e.into_inner());
@@ -372,7 +406,10 @@ pub(crate) fn status(line: &str) {
 /// Write content to standard output.
 pub(crate) fn out(text: &str) {
     // Content printed while something is redrawn in place goes above it, like a status line.
-    if let Some(live) = with_live(|slot| slot.clone()) {
+    // Only when both are on the terminal: content on its way to a file or a pipe is not in
+    // the way.
+    let on_screen = theme_out().mode == Mode::Rich;
+    if let Some(live) = with_live(|slot| slot.clone()).filter(|_| on_screen) {
         err(&live.clear);
         out_raw(text);
         err(&live.text);

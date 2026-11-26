@@ -100,7 +100,8 @@ each call in each mode.
 | `Browse::new().directories(true).hidden(true).ask(question, dir)` | `cli_browse -d -a` | pick a directory; show hidden files |
 | `Browse::new().ask_rows(question, &rows)` | `cli_browse -l` | the same over a list of paths |
 | `wizard(&mut state, &[steps])` | `cli_wizard` | ask questions in order; Escape goes back one |
-| `mode()`, `is_agent()`, `set_mode(Mode)`, `auto_mode()`, `set_color(bool)` | `cli_mode` | the mode |
+| `mode()`, `is_agent()`, `set_mode(Mode)`, `auto_mode()`, `set_color(bool)` | `cli_mode` | the mode (of standard output) |
+| `status_mode()` | `cli_mode -e` | the mode of standard error: with `tool > file` it stays rich at the terminal while `mode()` is plain |
 | `color()`, `unicode()`, `width()` | `cli_width` | what was decided: colours on, Unicode symbols on, the terminal's width; for drawing of your own |
 | `mode_guard()` | | puts the mode back when dropped: one line of your own prompt with `--agent` stays one line |
 | `has(program)`, `require(&programs)` | `cli_has`, `cli_require` | is a program installed |
@@ -266,7 +267,8 @@ use `clikit::testing::print` for output a test needs to see.
 
 ## Limits
 
-- The mode is decided on first use and then kept. Change it with `set_mode`.
+- The mode is decided on first use and then kept, for each stream on its own. Change it with
+  `set_mode`, which sets both.
 - Key-driven prompts use `stty` to read single keys, so they exist on Unix only. On Windows the
   prompts are the numbered, line-based ones. Windows is untested.
 - A line longer than the terminal is wide confuses the line editor.

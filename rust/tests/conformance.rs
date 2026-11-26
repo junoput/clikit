@@ -367,6 +367,7 @@ fn call(words: &[String], running: &mut Running) -> i32 {
         }
         "password" => return prompt_status(clikit::password(&args[0]), |answer| println_out(&answer)),
         "pause" => clikit::pause(args.first().map(String::as_str)),
+        "mode" if args.first().is_some_and(|flag| flag == "-e") => println_out(clikit::status_mode().as_str()),
         "mode" => println_out(clikit::mode().as_str()),
         "width" => println_out(&clikit::width().to_string()),
         "is_agent" => return i32::from(!clikit::is_agent()),
