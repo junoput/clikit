@@ -203,8 +203,9 @@ pub fn password(question: &str) -> Result<String, PromptError> {
             PromptError::NoAnswer
         });
     }
-    ctx::err(&format!("{}?{} {question} ", t.c(CYAN), t.c(RESET)));
+    // Echo goes off before the question shows: what is typed the moment it appears stays hidden.
     let mut keys = Keys::open();
+    ctx::err(&format!("{}?{} {question} ", t.c(CYAN), t.c(RESET)));
     let answer = if keys.raw() {
         let mut typed = String::new();
         loop {

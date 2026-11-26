@@ -79,7 +79,8 @@ def interrupted(argv, keys=b""):
 
 
 def typed_in_secret(command):
-    """Run `command | cat`, type a password. Returns (the question was shown, times the password appeared)."""
+    """Run `command | cat` and type a password the moment the question shows, as a paste or a
+    script would. Returns (the question was shown, times the password appeared)."""
     env = {name: os.environ[name] for name in ("PATH", "HOME", "TMPDIR") if name in os.environ}
     env.update({"TERM": "xterm-256color", "LANG": "en_US.UTF-8", "CLI_AGENT": "0"})
     pid, fd = pty.fork()
@@ -97,7 +98,9 @@ def typed_in_secret(command):
                 except OSError:
                     return
 
-    wait(1.2)
+    end = time.time() + 5
+    while b"Password" not in seen and time.time() < end:
+        wait(0.005)
     asked = b"Password" in seen
     os.write(fd, b"hunter2\r")
     wait(1.0)
