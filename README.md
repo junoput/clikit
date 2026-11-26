@@ -20,6 +20,21 @@ rich                                      plain                 agent
   production
 ```
 
+## What is in it
+
+| | |
+|---|---|
+| Status lines | info, ok, warning, error, numbered steps, hints; they go above a live bar, not through it |
+| Progress | a bar, a spinner, and several tasks under one total: stages or side by side, with sizes, speed, time left, notes, skipped and failed tasks |
+| Layout | headers, rules, boxes, lists, key-value lines, tables (numbers right-aligned, coloured cells, emoji and CJK measured, a column that is never cut) |
+| Over time and in depth | timelines (along an axis, or one row per event) and trees (of paths, or of the files on disk) |
+| Questions | menus, several choices, yes or no, text with suggestions, a hidden password, a file browser; Escape goes back one question |
+| Whole programs | commands, options and help pages; an interactive prompt with Tab completion and history, where Ctrl-C drops the line |
+| A prompt of your own (Rust) | a line editor: completion from your program with a list of what each candidate is, names with spaces quoted for you, history kept in a file, Ctrl-R, long lines |
+| Small things | durations, sizes, stopwatches, the terminal's width, whether colours are on |
+
+The two READMEs under [Implementations](#implementations) list every function.
+
 ## What it looks like
 
 At a terminal. Every picture is drawn by [`docs/render.py`](docs/render.py) from what the code
